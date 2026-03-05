@@ -7,7 +7,7 @@ import type { Env, HonoVariables } from '../types'
 const calibrationLogs = new Hono<{ Bindings: Env; Variables: HonoVariables }>()
 
 calibrationLogs.get('/', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const { roomId, from, to } = c.req.query()
 
   const conditions = []
@@ -24,7 +24,7 @@ calibrationLogs.get('/', async (c) => {
 })
 
 calibrationLogs.post('/', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const user = c.get('user')
   const body = await c.req.json<{
     roomId:        string

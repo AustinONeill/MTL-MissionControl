@@ -8,7 +8,7 @@ import type { Env, HonoVariables } from '../types'
 const sprayLogs = new Hono<{ Bindings: Env; Variables: HonoVariables }>()
 
 sprayLogs.get('/', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const { roomId, from, to } = c.req.query()
 
   const conditions = []
@@ -25,7 +25,7 @@ sprayLogs.get('/', async (c) => {
 })
 
 sprayLogs.post('/', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const user = c.get('user')
   const body = await c.req.json<{
     roomId:       string

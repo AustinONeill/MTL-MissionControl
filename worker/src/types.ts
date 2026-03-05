@@ -31,6 +31,9 @@ export interface AuthUser {
 }
 
 export interface Env {
+  // Hyperdrive connection pool (production)
+  HYPERDRIVE: Hyperdrive
+  // Direct DB URL fallback for local dev (wrangler dev)
   DATABASE_URL: string
   STACK_AUTH_JWKS_URL: string
   STACK_AUTH_PROJECT_ID: string

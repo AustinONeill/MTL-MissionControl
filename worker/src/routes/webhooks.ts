@@ -24,7 +24,7 @@ webhooks.post('/teams', async (c) => {
     return c.json({ type: 'message', text: 'Commands: "Status [Room Name]"' })
   }
 
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const roomName = statusMatch[1].trim()
 
   const room = await db.query.rooms.findFirst({

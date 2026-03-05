@@ -7,7 +7,7 @@ import type { Env, HonoVariables } from '../types'
 const events = new Hono<{ Bindings: Env; Variables: HonoVariables }>()
 
 events.get('/', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const { roomId, from, to } = c.req.query()
 
   const conditions = []

@@ -8,7 +8,7 @@ import type { Env, HonoVariables } from '../types'
 const flags = new Hono<{ Bindings: Env; Variables: HonoVariables }>()
 
 flags.get('/', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const all = await db.query.flags.findMany({
     orderBy: (f, { asc }) => [asc(f.label)],
   })
@@ -16,7 +16,7 @@ flags.get('/', async (c) => {
 })
 
 flags.post('/', requireRole('director'), async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const body = await c.req.json<{
     type: string
     label: string
@@ -35,7 +35,7 @@ flags.post('/', requireRole('director'), async (c) => {
 })
 
 flags.put('/:id', requireRole('director'), async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const body = await c.req.json()
   const [flag] = await db
     .update(schema.flags)
@@ -46,7 +46,7 @@ flags.put('/:id', requireRole('director'), async (c) => {
 })
 
 flags.delete('/:id', requireRole('director'), async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   await db.delete(schema.flags).where(eq(schema.flags.id, c.req.param('id')))
   return new Response(null, { status: 204 })
 })

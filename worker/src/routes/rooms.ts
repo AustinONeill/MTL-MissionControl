@@ -11,7 +11,7 @@ const rooms = new Hono<{ Bindings: Env; Variables: HonoVariables }>()
 
 // GET /api/rooms — all rooms with their active flags
 rooms.get('/', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const all = await db.query.rooms.findMany({
     with: { roomFlags: { with: { flag: true } } },
     orderBy: (r, { asc }) => [asc(r.name)],
@@ -21,7 +21,7 @@ rooms.get('/', async (c) => {
 
 // GET /api/rooms/:id — single room with flags + recent logs
 rooms.get('/:id', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const id = c.req.param('id')
   const room = await db.query.rooms.findFirst({
     where: eq(schema.rooms.id, id),
@@ -37,7 +37,7 @@ rooms.get('/:id', async (c) => {
 
 // PATCH /api/rooms/:id — update mode
 rooms.patch('/:id', requireRole('master_grower'), async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const user = c.get('user')
   const id = c.req.param('id')
   const body = await c.req.json<{ mode?: string }>()
@@ -71,7 +71,7 @@ rooms.patch('/:id', requireRole('master_grower'), async (c) => {
 
 // POST /api/rooms/:id/flags — assign flag to room
 rooms.post('/:id/flags', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const user = c.get('user')
   const roomId = c.req.param('id')
   const body = await c.req.json<{ flagId: string }>()
@@ -105,7 +105,7 @@ rooms.post('/:id/flags', async (c) => {
 
 // DELETE /api/rooms/:id/flags/:flagId — remove flag from room
 rooms.delete('/:id/flags/:flagId', async (c) => {
-  const db = getDb(c.env.DATABASE_URL)
+  const db = getDb(c.env)
   const user = c.get('user')
   const roomId = c.req.param('id')
   const flagId = c.req.param('flagId')
