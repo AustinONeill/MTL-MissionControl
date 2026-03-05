@@ -15,22 +15,23 @@ The application is divided into three distinct layers to ensure separation of co
 
 - Renders the isometric facility map using HTML5 Canvas or SVG with CSS transforms.
 - Displays the live-time header with a real-time clock updated every second.
-- Manages the toolbox panel, including the room legend and draggable/droppable flag components.
+- Manages the toolbox panel, including the room legend and draggable/droppable flag components (desktop) and tap-to-select/tap-to-assign flag components (mobile).
 - Adapts all UI elements responsively across desktop, tablet, and mobile viewports.
 - Provides visual feedback on flag placement, drag interactions, and status changes.
 
 ### Application Layer
 
-- Controls drag-and-drop logic for flags, snapping flags to valid room targets on the isometric grid.
+- Controls drag-and-drop logic for flags on desktop, snapping flags to valid room targets on the isometric grid.
+- Controls two-step tap-to-assign on mobile: operator taps a flag to select it, then taps a room tile to assign it.
 - Manages flag state: type, room assignment, timestamps, and priority levels.
-- Interfaces with the integration service layer to push/pull data from WhatsApp and Outlook Calendar.
+- Interfaces with the integration service layer to push/pull data from Microsoft Teams and Outlook Calendar.
 - Handles the responsive layout engine — recalculating isometric tile positions on viewport resize.
 - Exposes a local event bus so UI components react to room-state changes in real time.
 
 ### Data / Integration Layer
 
 - Persists room state, flag assignments, and user sessions to a lightweight backend (Node.js/Express or Next.js API routes).
-- Communicates with the WhatsApp Business API (via Meta Cloud API or Twilio) for bot-driven alerts.
+- Communicates with the Microsoft Teams API (via Bot Framework / incoming webhooks) for bot-driven alerts and room status queries.
 - Communicates with Microsoft Graph API for reading and writing Outlook Calendar events.
 - Stores configuration and historical state in a database (PostgreSQL or MongoDB).
 - Exposes REST or WebSocket endpoints for the Application Layer to consume.
@@ -43,7 +44,7 @@ The application is divided into three distinct layers to ensure separation of co
 
 - **Facility Operator** — Staff member monitoring rooms on the dashboard.
 - **Admin** — Manages flag types, room configuration, and integration credentials.
-- **WhatsApp Bot** — Automated agent that sends/receives alerts tied to room flags.
+- **Teams Bot** — Automated agent that sends/receives alerts tied to room flags via Microsoft Teams channels or direct messages.
 - **Outlook Calendar** — External scheduling service that syncs harvest and maintenance events.
 
 ### Use Cases
@@ -66,17 +67,17 @@ Precondition: A flag is already assigned to a room.
 Flow: Operator drags the flag from its current room to a new room tile; old room clears; new room receives the flag.  
 Postcondition: State is updated and change is logged with a timestamp.
 
-**UC-04: Receive WhatsApp Alert**  
-Actor: Facility Operator, WhatsApp Bot  
-Precondition: WhatsApp integration is configured; a flag event is triggered.  
-Flow: Application layer detects a critical flag placement (e.g., "Maintenance Required"); integration layer calls WhatsApp Cloud API to send a message to configured recipients.  
-Postcondition: Operator receives a WhatsApp notification with room name and flag type.
+**UC-04: Receive Teams Alert**  
+Actor: Facility Operator, Teams Bot  
+Precondition: Microsoft Teams integration is configured; a flag event is triggered.  
+Flow: Application layer detects a critical flag placement (e.g., "Maintenance Required"); integration layer posts an Adaptive Card message to a configured Teams channel or DM via incoming webhook or Bot Framework.  
+Postcondition: Operator receives a Teams notification with room name and flag type.
 
-**UC-05: Query Room Status via WhatsApp Bot**  
+**UC-05: Query Room Status via Teams Bot**  
 Actor: Facility Operator  
-Precondition: WhatsApp webhook is active.  
-Flow: Operator sends a message such as "Status Room 3"; bot queries current room state from the database; bot replies with flag assignments and last-updated timestamps.  
-Postcondition: Operator receives an up-to-date status summary.
+Precondition: Teams bot is deployed and active in the team's channel.  
+Flow: Operator sends a message such as "Status Room 3" in the Teams channel; bot queries current room state from the database; bot replies with an Adaptive Card showing flag assignments and last-updated timestamps.  
+Postcondition: Operator receives an up-to-date status summary inside Teams.
 
 **UC-06: Sync Harvest Event to Outlook Calendar**  
 Actor: Facility Operator, Outlook Calendar  
@@ -87,8 +88,8 @@ Postcondition: All team members with calendar access see the scheduled harvest.
 **UC-07: Responsive Layout on Mobile**  
 Actor: Facility Operator  
 Precondition: User accesses dashboard on a phone or tablet.  
-Flow: Viewport resize event triggers the responsive engine; isometric tiles rescale using a CSS viewport-relative transform; the toolbox collapses into a slide-out drawer; drag interactions are replaced with tap-to-assign on touch devices.  
-Postcondition: Full functionality is available on touch screens.
+Flow: Viewport resize event triggers the responsive engine; isometric tiles rescale using a CSS viewport-relative transform; the toolbox collapses into a slide-out drawer; drag-and-drop is replaced with a two-step tap interaction — operator taps a flag in the toolbox to select it (highlighted with an active state), then taps a room tile to assign it. Tapping the selected flag again deselects it. Tapping a room with no flag selected opens the room detail drawer.  
+Postcondition: Full functionality is available on touch screens without requiring drag gestures.
 
 ---
 
@@ -129,9 +130,9 @@ Postcondition: Full functionality is available on touch screens.
 ### Backend / Integration
 
 - **Node.js + Express (or Next.js API routes):** REST API and webhook receiver.
-- **Meta WhatsApp Cloud API (or Twilio WhatsApp):** Sends outbound messages and receives inbound bot queries via webhooks.
+- **Microsoft Teams (Bot Framework / Incoming Webhooks):** Sends Adaptive Card alerts to channels and receives inbound bot commands; shares the same Azure AD app registration as Graph API.
 - **Microsoft Graph API:** OAuth 2.0 authenticated calls to `/me/events` for calendar read/write.
-- **Socket.io:** Real-time push to the frontend when flag state changes from an external source (e.g., a WhatsApp command).
+- **Socket.io:** Real-time push to the frontend when flag state changes from an external source (e.g., a Teams bot command).
 - **Prisma + PostgreSQL (or Mongoose + MongoDB):** Persistent storage for room state and flag history.
 
 ### DevOps
@@ -164,14 +165,15 @@ Postcondition: Full functionality is available on touch screens.
 
 ### Flag
 
-- Draggable component with an icon, label, and optional priority badge.
+- Draggable component on desktop with an icon, label, and optional priority badge.
+- On mobile, renders as a tappable card in the toolbox drawer. Tapping selects it (sets `selectedFlagId` in state and highlights the card); tapping a room tile while a flag is selected triggers assignment. Tapping the flag again deselects it.
 - Tracks `homeRoomId` (null if in toolbox) and `placedAt` timestamp.
-- Emits `onFlagMove(flagId, targetRoomId)` event consumed by global state.
+- Emits `onFlagAssign(flagId, targetRoomId)` event consumed by global state (shared between drag-drop and tap-to-assign paths).
 
 ### IntegrationService (backend module)
 
-- `sendWhatsAppAlert(roomName, flagType, recipients[])` — calls WhatsApp Cloud API.
-- `listenWhatsAppWebhook(req)` — parses inbound bot messages and queries room state.
+- `sendTeamsAlert(roomName, flagType, channelWebhookUrl)` — posts an Adaptive Card to a Teams channel via incoming webhook.
+- `listenTeamsBotMessage(req)` — parses inbound Bot Framework activity, handles "Status [Room]" commands, and returns room state as an Adaptive Card reply.
 - `createOutlookEvent(roomName, date, title)` — calls Graph API with Bearer token.
 - `getOutlookEvents(dateRange)` — fetches scheduled events for display on dashboard.
 
@@ -179,7 +181,8 @@ Postcondition: Full functionality is available on touch screens.
 
 - `rooms`: map of `roomId → { name, currentFlag, lastUpdated }`
 - `flags`: list of flag definitions (type, icon, color, notificationEnabled)
-- `integrations`: WhatsApp config, Graph API token, notification preferences
+- `selectedFlagId`: the flag currently selected on mobile (null on desktop)
+- `integrations`: Teams webhook URL, Graph API token, notification preferences
 
 ---
 
@@ -200,7 +203,7 @@ Postcondition: Full functionality is available on touch screens.
       v            v
 [Socket.io]   [REST API / DB]
       |            |
-      |            |-- WhatsApp Cloud API --> [Operator WhatsApp]
+      |            |-- Teams Incoming Webhook --> [Teams Channel / DM]
       |            |
       |            |-- Microsoft Graph API --> [Outlook Calendar]
       |
@@ -223,14 +226,14 @@ Postcondition: Full functionality is available on touch screens.
 1. interact.js fires drop event with `flagId` and `roomId`.
 2. StateStore dispatches `ASSIGN_FLAG`; UI updates optimistically.
 3. REST API `PATCH /rooms/:id` persists the change.
-4. If the flag type has `notificationEnabled: true`, IntegrationService sends a WhatsApp message.
+4. If the flag type has `notificationEnabled: true`, IntegrationService posts a Teams Adaptive Card alert to the configured channel webhook.
 5. If the flag type is `HARVEST_READY`, IntegrationService creates an Outlook Calendar event.
 
-### WhatsApp Bot Query
+### Teams Bot Query
 
-1. Operator sends "Status [Room Name]" to the business WhatsApp number.
-2. Webhook receives the message; IntegrationService queries DB for room state.
-3. Bot replies with formatted text: room name, current flag, operator, timestamp.
+1. Operator sends "Status [Room Name]" in the Teams channel where the bot is installed.
+2. Bot Framework webhook receives the activity; IntegrationService queries DB for room state.
+3. Bot replies with an Adaptive Card: room name, current flag, operator, timestamp.
 
 ### Responsive Resize
 
@@ -247,14 +250,14 @@ Postcondition: Full functionality is available on touch screens.
 
 - **In-memory state (StateStore):** Live room and flag state during a session.
 - **REST API + Database:** Persistent room configuration, flag history, and integration credentials.
-- **External APIs:** WhatsApp Cloud API (Meta) and Microsoft Graph API (Microsoft 365).
+- **External APIs:** Microsoft Teams (Bot Framework / incoming webhooks) and Microsoft Graph API (Microsoft 365).
 
 ### Types of Data
 
 - **Room State:** `roomId`, `name`, `position (col/row)`, `currentFlagId`, `lastUpdated`
 - **Flag Definitions:** `flagId`, `type`, `icon URL`, `color`, `notificationEnabled`, `calendarEnabled`
-- **Event Log:** `timestamp`, `operatorId`, `roomId`, `previousFlagId`, `newFlagId`, `source (UI/WhatsApp)`
-- **Integration Config:** WhatsApp phone number ID, access token, Graph API client ID/secret
+- **Event Log:** `timestamp`, `operatorId`, `roomId`, `previousFlagId`, `newFlagId`, `source (UI/TEAMS)`
+- **Integration Config:** Teams channel webhook URL, Bot Framework app ID/secret, Graph API client ID/secret
 - **Calendar Events:** `title`, `roomId`, `scheduledDate`, `outlookEventId`
 
 ---
@@ -267,7 +270,7 @@ Postcondition: Full functionality is available on touch screens.
 | Flag Definition | Admin adds flag type | `GET /flags` | `PUT /flags/:id` | `DELETE /flags/:id` |
 | Event Log | Auto on every flag move | `GET /events?roomId=&date=` | (immutable log) | Admin purge only |
 | Outlook Event | `POST` via Graph API on harvest | `GET` Graph `/me/events` | `PATCH` Graph `/me/events/:id` | `DELETE` Graph `/me/events/:id` |
-| WhatsApp Message | Triggered by flag placement | Webhook inbound | N/A | N/A |
+| Teams Message | Triggered by flag placement (Adaptive Card) | Bot Framework webhook inbound | N/A | N/A |
 
 ---
 
@@ -276,7 +279,7 @@ Postcondition: Full functionality is available on touch screens.
 ### Storage Methods
 
 - **PostgreSQL (via Prisma):** Primary relational store for rooms, flags, event log, and calendar references.
-- **Environment Variables (.env):** Secrets — WhatsApp access token, Graph API client secret, DB connection string.
+- **Environment Variables (.env):** Secrets — Teams webhook URL, Bot Framework credentials, Graph API client secret, DB connection string.
 - **Browser LocalStorage:** Persists toolbox collapse state and display preferences client-side.
 - **In-memory (StateStore):** Fast, reactive state for the UI; hydrated from REST API on load.
 
@@ -310,7 +313,7 @@ model EventLog {
   roomId       String
   previousFlag String?
   newFlag      String?
-  source       String   // "UI" | "WHATSAPP"
+  source       String   // "UI" | "TEAMS"
   createdAt    DateTime @default(now())
 }
 ```
@@ -323,7 +326,7 @@ model EventLog {
 
 - **Desktop (≥1280px):** Full isometric map, toolbox on the right, header full width.
 - **Tablet (768–1279px):** Map scales to 70% of container width; toolbox collapses to icon strip.
-- **Mobile (<768px):** Map scrolls horizontally; toolbox becomes a bottom drawer; drag becomes tap-to-assign.
+- **Mobile (<768px):** Map scrolls horizontally; toolbox becomes a bottom drawer; drag-and-drop is replaced with two-step tap-to-assign (tap flag → tap room).
 
 ### Scaling Technique
 
@@ -344,21 +347,41 @@ const scale = container.offsetWidth / BASE_MAP_WIDTH;
 document.documentElement.style.setProperty('--map-scale', scale);
 ```
 
-### Touch Support
+### Touch Interaction Model
 
-- interact.js natively supports pointer events, covering mouse and touch simultaneously.
-- A tap on a room while a flag is "selected" in the toolbox triggers assignment on mobile.
+On desktop, interact.js handles drag-and-drop natively via pointer events.
+
+On mobile, a dedicated two-step tap model replaces drag entirely:
+
+1. Operator taps a flag card in the toolbox drawer — the card enters an "active" highlighted state and `selectedFlagId` is set in the store.
+2. All room tiles show a subtle "ready to receive" highlight.
+3. Operator taps a room tile — `onFlagAssign(selectedFlagId, roomId)` fires, the flag is assigned, and `selectedFlagId` clears.
+4. Tapping the already-selected flag again cancels the selection.
+5. Tapping any room tile with no flag selected opens the room detail drawer as normal.
+
+This avoids the ergonomic challenges of precise drag gestures on small touch screens.
 
 ---
 
 ## 12. Integration Architecture
 
-### WhatsApp (Meta Cloud API)
+### Microsoft Teams (Bot Framework + Incoming Webhooks)
 
-1. Register a Meta Business Account and obtain a WhatsApp Business Phone Number ID and Access Token.
-2. Configure a webhook URL in Meta Developer Console pointing to `POST /webhooks/whatsapp`.
-3. Backend verifies the webhook with a `verify_token`; processes inbound messages.
-4. Outbound messages: `POST https://graph.facebook.com/v19.0/{phone-number-id}/messages` with `{ to, type: "text", text: { body } }` and `Authorization: Bearer <token>`.
+**Outbound alerts (Incoming Webhook — simplest path):**
+
+1. In the target Teams channel, add the "Incoming Webhook" connector and copy the webhook URL.
+2. Store the URL in `.env` as `TEAMS_WEBHOOK_URL`.
+3. On a flag event, backend POSTs an Adaptive Card payload to the webhook URL — no Azure AD registration required for outbound-only alerts.
+
+**Inbound bot queries (Bot Framework — required for "Status Room 3" queries):**
+
+1. Register a Bot in Azure Portal (Azure Bot resource); obtain App ID and Client Secret.
+2. In Teams Admin, side-load the bot manifest or publish to the org's app catalog.
+3. Configure messaging endpoint: `POST /webhooks/teams` on the backend.
+4. Backend uses `botbuilder` SDK to parse incoming activities and reply with Adaptive Cards.
+5. The Bot Framework app registration can share the same Azure AD app as the Graph API integration, reducing credential overhead.
+
+**Key advantage over WhatsApp:** No per-message cost, no Meta business verification, same Azure tenant as Outlook Calendar integration.
 
 ### Outlook Calendar (Microsoft Graph API)
 
@@ -371,7 +394,9 @@ document.documentElement.style.setProperty('--map-scale', scale);
 
 ## 13. References
 
-- Meta. (2024). *WhatsApp Cloud API Documentation*. https://developers.facebook.com/docs/whatsapp/cloud-api
+- Microsoft. (2024). *Build bots with Microsoft Bot Framework*. https://learn.microsoft.com/en-us/azure/bot-service/
+- Microsoft. (2024). *Create Incoming Webhooks in Microsoft Teams*. https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook
+- Microsoft. (2024). *Adaptive Cards for Teams*. https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/design-effective-cards
 - Microsoft. (2024). *Outlook Calendar API overview — Microsoft Graph*. https://learn.microsoft.com/en-us/graph/outlook-calendar-concept-overview
 - interact.js. (2024). *Drag and Drop & Resizing for the Modern Web*. https://interactjs.io
 - Kenney. (2024). *Isometric Asset Packs*. https://kenney.nl/assets?q=isometric
