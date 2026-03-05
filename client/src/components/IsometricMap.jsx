@@ -4,6 +4,7 @@ import { DefoliationInfoModal } from './DefoliationModal'
 import QuickLogModal from './QuickLogModal'
 import RoomModeBadge from './RoomModeBadge'
 import ReEntryBadge from './ReEntryBadge'
+import TransferLine from './TransferLine'
 
 // ─── Isometric projection constants ────────────────────────────────────────────
 const TW = 88   // tile width  (screen px per grid unit)
@@ -151,7 +152,7 @@ const LAYOUT = [
 
 // ─── Single isometric box tile ───────────────────────────────────────────────
 function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover, onDefolClick,
-                  isDragOver, onDragEnter, onDragLeave, onDrop, onTap }) {
+                  isDragOver, onDragEnter, onDragLeave, onDrop, isPendingOrigin, isTransferDest }) {
   const { col, row, w, h } = room
   const s = (gx, gy) => ({ x: ox + iso(gx, gy).x, y: oy + iso(gx, gy).y })
 
@@ -294,6 +295,24 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
         </polygon>
       )}
 
+      {/* Pending transfer origin — amber flash */}
+      {isPendingOrigin && (
+        <>
+          <polygon points={pts([TL, TR, BR, BL])} fill="#f59e0b" fillOpacity={0.12}>
+            <animate attributeName="fill-opacity" values="0.06;0.22;0.06" dur="0.9s" repeatCount="indefinite" />
+          </polygon>
+          <polygon points={pts([TL, TR, BR, BL])} fill="none" stroke="#f59e0b" strokeWidth={2}>
+            <animate attributeName="stroke-opacity" values="0.4;1;0.4" dur="0.9s" repeatCount="indefinite" />
+          </polygon>
+        </>
+      )}
+
+      {/* Transfer destination highlight — when a pending origin exists */}
+      {isTransferDest && room.interactive && (
+        <polygon points={pts([TL, TR, BR, BL])} fill="#f59e0b" fillOpacity={0.06}
+          stroke="#f59e0b" strokeWidth={1} strokeDasharray="5 3" strokeOpacity={0.5} />
+      )}
+
       {/* Room name label */}
       {room.interactive && (
         <text
@@ -417,21 +436,33 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
 
 // ─── Main isometric map component ───────────────────────────────────────────
 export default function IsometricMap() {
-  const rooms            = useFacilityStore(s => s.rooms)
-  const selectRoom       = useFacilityStore(s => s.selectRoom)
-  const selectedId       = useFacilityStore(s => s.selectedRoomId)
-  const openDefolInfo    = useFacilityStore(s => s.openDefolInfo)
-  const loadRooms        = useFacilityStore(s => s.loadRooms)
-  const connectRoomWs    = useFacilityStore(s => s.connectRoomWs)
-  const selectedFlagId   = useFacilityStore(s => s.selectedFlagId)
-  const clearSelectedFlag = useFacilityStore(s => s.clearSelectedFlag)
-  const addSymbolToRoom  = useFacilityStore(s => s.addSymbolToRoom)
-  const apiStatus        = useFacilityStore(s => s.apiStatus)
+  const rooms                = useFacilityStore(s => s.rooms)
+  const selectRoom           = useFacilityStore(s => s.selectRoom)
+  const selectedId           = useFacilityStore(s => s.selectedRoomId)
+  const openDefolInfo        = useFacilityStore(s => s.openDefolInfo)
+  const loadRooms            = useFacilityStore(s => s.loadRooms)
+  const connectRoomWs        = useFacilityStore(s => s.connectRoomWs)
+  const selectedFlagId       = useFacilityStore(s => s.selectedFlagId)
+  const clearSelectedFlag    = useFacilityStore(s => s.clearSelectedFlag)
+  const addSymbolToRoom      = useFacilityStore(s => s.addSymbolToRoom)
+  const apiStatus            = useFacilityStore(s => s.apiStatus)
+  const transfers            = useFacilityStore(s => s.transfers)
+  const pendingTransferOrigin = useFacilityStore(s => s.pendingTransferOrigin)
+  const startTransfer        = useFacilityStore(s => s.startTransfer)
+  const completeTransfer     = useFacilityStore(s => s.completeTransfer)
+  const cancelTransfer       = useFacilityStore(s => s.cancelTransfer)
 
   // Load rooms from API on mount; connect WebSocket per room
   useEffect(() => {
     loadRooms()
   }, [loadRooms])
+
+  // Escape cancels a pending transfer
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') cancelTransfer() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cancelTransfer])
 
   useEffect(() => {
     if (apiStatus === 'online') {
@@ -448,8 +479,16 @@ export default function IsometricMap() {
 
   const handleDrop = useCallback((roomId, symbolKey) => {
     setDragOverId(null)
+    if (symbolKey === 'transfer') {
+      if (!pendingTransferOrigin) {
+        startTransfer(roomId)
+      } else if (pendingTransferOrigin !== roomId) {
+        completeTransfer(roomId)
+      }
+      return
+    }
     setPendingDrop({ roomId, symbolKey })
-  }, [])
+  }, [pendingTransferOrigin, startTransfer, completeTransfer])
 
   const handleDragEnter = useCallback((roomId) => setDragOverId(roomId), [])
   const handleDragLeave = useCallback(() => setDragOverId(null), [])
@@ -511,6 +550,19 @@ export default function IsometricMap() {
           OFFLINE — changes will sync on reconnect
         </div>
       )}
+
+      {pendingTransferOrigin && (
+        <div style={{
+          position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+          background: '#3a2800', color: '#f59e0b', border: '1px solid #f59e0b',
+          borderRadius: 4, padding: '5px 14px', fontSize: 11,
+          fontFamily: "'JetBrains Mono', monospace", zIndex: 10, whiteSpace: 'nowrap',
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{ animation: 'blink 0.9s step-end infinite' }}>⇄</span>
+          SELECT DESTINATION ROOM — ESC to cancel
+        </div>
+      )}
       <svg
         viewBox={`0 0 ${svgW} ${svgH}`}
         width={svgW}
@@ -544,6 +596,12 @@ export default function IsometricMap() {
         {sortedTiles.map(tile => {
           const fc = faceColors(tile.type, tile.status)
           const hasDefol = tile.symbols?.includes('defoliation')
+          const isPendingOrigin = pendingTransferOrigin === tile.id
+          // Highlight eligible destinations while a transfer is pending
+          const isTransferDest = !!pendingTransferOrigin
+            && pendingTransferOrigin !== tile.id
+            && tile.interactive
+
           return (
             <IsoBox
               key={tile.id}
@@ -553,22 +611,61 @@ export default function IsometricMap() {
               colors={{ top: fc.top, left: fc.left, right: fc.right, stroke: fc.stroke, label: fc.label }}
               onClick={() => {
                 if (!tile.interactive) return
-                // Mobile tap-to-assign: if a flag is selected, assign it
+
+                if (pendingTransferOrigin && pendingTransferOrigin !== tile.id) {
+                  completeTransfer(tile.id)
+                  return
+                }
+
+                if (selectedFlagId === 'transfer') {
+                  startTransfer(tile.id)
+                  clearSelectedFlag()
+                  return
+                }
+
                 if (selectedFlagId) {
                   addSymbolToRoom(tile.id, selectedFlagId, selectedFlagId)
                   clearSelectedFlag()
-                } else {
-                  selectRoom(tile.id)
+                  return
                 }
+
+                selectRoom(tile.id)
               }}
               isSelected={selectedId === tile.id}
               isHovered={hoveredId === tile.id}
-              isDragOver={dragOverId === tile.id || (selectedFlagId && hoveredId === tile.id)}
+              isDragOver={dragOverId === tile.id || (selectedFlagId && selectedFlagId !== 'transfer' && hoveredId === tile.id)}
+              isPendingOrigin={isPendingOrigin}
+              isTransferDest={isTransferDest}
               onHover={setHoveredId}
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onDefolClick={hasDefol ? () => openDefolInfo(tile.id) : undefined}
+            />
+          )
+        })}
+
+        {/* Transfer connecting lines — rendered above all tiles */}
+        {Object.entries(transfers).map(([originId, t]) => {
+          if (!t.destinationId) return null
+          const originTile = LAYOUT.find(l => l.id === originId)
+          const destTile   = LAYOUT.find(l => l.id === t.destinationId)
+          if (!originTile || !destTile) return null
+
+          const tileCenter = ({ col, row, w, h }) => ({
+            x: ox + (iso(col, row).x + iso(col + w, row).x + iso(col + w, row + h).x + iso(col, row + h).x) / 4,
+            y: oy + (iso(col, row).y + iso(col + w, row).y + iso(col + w, row + h).y + iso(col, row + h).y) / 4,
+          })
+
+          const from = tileCenter(originTile)
+          const to   = tileCenter(destTile)
+
+          return (
+            <TransferLine
+              key={originId}
+              x1={from.x} y1={from.y}
+              x2={to.x}   y2={to.y}
+              label={t.transferType ?? 'Transfer'}
             />
           )
         })}

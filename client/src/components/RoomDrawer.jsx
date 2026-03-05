@@ -5,6 +5,7 @@ import SprayLogModal from './SprayLogModal'
 import CalibrationLogModal from './CalibrationLogModal'
 import SprayLogList from './SprayLogList'
 import CalibrationLogList from './CalibrationLogList'
+import TransferModal from './TransferModal'
 
 const STATUS_LABEL = {
   [STATUS.NORMAL]: 'NORMAL',
@@ -49,17 +50,23 @@ const SYMBOL_DISPLAY = {
 const DRAWER_TABS = ['OVERVIEW', 'SPRAY LOGS', 'CALIBRATION']
 
 export default function RoomDrawer() {
-  const { selectedRoomId, drawerOpen, closeDrawer, getRoom, updateRoomStatus, updateRoomMode } = useFacilityStore()
+  const { selectedRoomId, drawerOpen, closeDrawer, getRoom, updateRoomStatus, updateRoomMode, transfers } = useFacilityStore()
   const room = selectedRoomId ? getRoom(selectedRoomId) : null
+  // Transfer where this room is origin or destination
+  const transferAsOrigin = room ? transfers[room.id] : null
+  const transferAsDest   = room
+    ? Object.entries(transfers).find(([, t]) => t.destinationId === room.id)
+    : null
   const sc   = room ? STATUS_COLORS[room.status] ?? STATUS_COLORS[STATUS.NORMAL] : STATUS_COLORS[STATUS.NORMAL]
   const tc   = room ? (TYPE_COLOR[room.type] || TYPE_COLOR.utility) : TYPE_COLOR.utility
 
-  const [tab, setTab]               = useState('OVERVIEW')
-  const [defolOpen, setDefolOpen]   = useState(false)
-  const [sprayOpen, setSprayOpen]   = useState(false)
-  const [calibOpen, setCalibOpen]   = useState(false)
-  const [sprayKey, setSprayKey]     = useState(0)
-  const [calibKey, setCalibKey]     = useState(0)
+  const [tab, setTab]                 = useState('OVERVIEW')
+  const [defolOpen, setDefolOpen]     = useState(false)
+  const [sprayOpen, setSprayOpen]     = useState(false)
+  const [calibOpen, setCalibOpen]     = useState(false)
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [sprayKey, setSprayKey]       = useState(0)
+  const [calibKey, setCalibKey]       = useState(0)
 
   const hasDefoliation = room?.symbols?.includes('defoliation')
 
@@ -155,6 +162,59 @@ export default function RoomDrawer() {
                   </section>
                 )}
 
+                {/* Transfer info card — shown when this room has an active transfer */}
+                {(transferAsOrigin || transferAsDest) && (
+                  <section className="drawer-section">
+                    <h3 className="section-title">ACTIVE TRANSFER</h3>
+                    {transferAsOrigin && (
+                      <div className="transfer-info-card">
+                        <div className="transfer-info-row">
+                          <span className="transfer-info-label">TO</span>
+                          <span className="transfer-info-value" style={{ color: '#f59e0b' }}>
+                            {getRoom(transferAsOrigin.destinationId)?.name ?? transferAsOrigin.destinationId}
+                          </span>
+                        </div>
+                        {transferAsOrigin.transferType && (
+                          <div className="transfer-info-row">
+                            <span className="transfer-info-label">TYPE</span>
+                            <span className="transfer-info-value">{transferAsOrigin.transferType}</span>
+                          </div>
+                        )}
+                        {transferAsOrigin.transferDate && (
+                          <div className="transfer-info-row">
+                            <span className="transfer-info-label">DATE</span>
+                            <span className="transfer-info-value">
+                              {new Date(transferAsOrigin.transferDate).toLocaleString('en-CA', {
+                                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+                              })}
+                            </span>
+                          </div>
+                        )}
+                        {transferAsOrigin.notes && (
+                          <p className="transfer-info-notes">{transferAsOrigin.notes}</p>
+                        )}
+                        <button
+                          className="transfer-edit-btn"
+                          onClick={() => setTransferOpen(true)}
+                        >
+                          ✏ Edit Transfer
+                        </button>
+                      </div>
+                    )}
+                    {transferAsDest && !transferAsOrigin && (
+                      <div className="transfer-info-card transfer-info-card--incoming">
+                        <div className="transfer-info-row">
+                          <span className="transfer-info-label">FROM</span>
+                          <span className="transfer-info-value" style={{ color: '#f59e0b' }}>
+                            {getRoom(transferAsDest[0])?.name ?? transferAsDest[0]}
+                          </span>
+                        </div>
+                        <p className="transfer-info-notes">Incoming transfer — edit from origin room.</p>
+                      </div>
+                    )}
+                  </section>
+                )}
+
                 {/* Action buttons */}
                 <div className="drawer-actions">
                   <button className="action-btn primary" onClick={() => { setSprayOpen(true) }}>
@@ -230,6 +290,13 @@ export default function RoomDrawer() {
           roomId={room.id}
           onClose={() => setCalibOpen(false)}
           onSaved={() => { setCalibKey(k => k + 1); setTab('CALIBRATION') }}
+        />
+      )}
+
+      {transferOpen && room && transferAsOrigin && (
+        <TransferModal
+          originRoomId={room.id}
+          onClose={() => setTransferOpen(false)}
         />
       )}
     </>

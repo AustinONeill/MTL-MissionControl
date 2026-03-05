@@ -103,6 +103,14 @@ export const useFacilityStore = create((set, get) => ({
   },
   defolInfoRoomId: null,
 
+  // ── Transfers ─────────────────────────────────────────────────────────────
+  // Keyed by origin roomId
+  // { [originId]: { destinationId, transferDate, transferType, notes, createdAt, createdBy } }
+  transfers: {},
+
+  // First step of the two-step transfer assignment
+  pendingTransferOrigin: null,
+
   // WebSocket connections per roomId
   _wsMap: {},
 
@@ -237,6 +245,78 @@ export const useFacilityStore = create((set, get) => ({
     set(state => ({
       rooms: state.rooms.map(r => r.id === roomId ? { ...r, status } : r),
     })),
+
+  // ── Transfer actions ──────────────────────────────────────────────────────
+
+  // Step 1: mark a room as the pending transfer origin
+  startTransfer: (originRoomId) => {
+    set((state) => ({
+      pendingTransferOrigin: originRoomId,
+      rooms: state.rooms.map(r =>
+        r.id === originRoomId && !r.symbols.includes(SYMBOLS.TRANSFER)
+          ? { ...r, symbols: [...r.symbols, SYMBOLS.TRANSFER] }
+          : r
+      ),
+    }))
+  },
+
+  // Step 2: complete the transfer by choosing a destination
+  completeTransfer: (destinationRoomId) => {
+    const { pendingTransferOrigin } = get()
+    if (!pendingTransferOrigin || pendingTransferOrigin === destinationRoomId) return
+
+    set((state) => ({
+      pendingTransferOrigin: null,
+      transfers: {
+        ...state.transfers,
+        [pendingTransferOrigin]: {
+          destinationId: destinationRoomId,
+          transferDate: null,
+          transferType: 'transplant',
+          notes: '',
+          createdAt: new Date().toISOString(),
+        },
+      },
+    }))
+  },
+
+  // Cancel pending transfer origin (e.g. user presses Escape)
+  cancelTransfer: () => {
+    const { pendingTransferOrigin } = get()
+    if (!pendingTransferOrigin) return
+    set((state) => ({
+      pendingTransferOrigin: null,
+      rooms: state.rooms.map(r =>
+        r.id === pendingTransferOrigin
+          ? { ...r, symbols: r.symbols.filter(s => s !== SYMBOLS.TRANSFER) }
+          : r
+      ),
+    }))
+  },
+
+  // Update transfer details (from TransferModal)
+  updateTransfer: (originRoomId, data) =>
+    set((state) => ({
+      transfers: {
+        ...state.transfers,
+        [originRoomId]: { ...state.transfers[originRoomId], ...data },
+      },
+    })),
+
+  // Remove a transfer entirely
+  removeTransfer: (originRoomId) =>
+    set((state) => {
+      const transfers = { ...state.transfers }
+      delete transfers[originRoomId]
+      return {
+        transfers,
+        rooms: state.rooms.map(r =>
+          r.id === originRoomId
+            ? { ...r, symbols: r.symbols.filter(s => s !== SYMBOLS.TRANSFER) }
+            : r
+        ),
+      }
+    }),
 
   // ── Defoliation ──────────────────────────────────────────────────────────
   toggleDefolHalf: (roomId, tableId, half) =>

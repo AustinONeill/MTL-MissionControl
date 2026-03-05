@@ -4,7 +4,7 @@
 **Author:** Austin O'Neill  
 **Repository:** https://github.com/AustinONeill/MTL-MissionControl  
 **Date:** March 5, 2026  
-**Last Updated:** March 5, 2026
+**Last Updated:** March 5, 2026 — Transfer Feature added
 
 ---
 
@@ -133,13 +133,27 @@ Precondition: Teams integration configured; flag or spray event triggered.
 Flow: Backend detects event; posts Adaptive Card to configured Teams channel webhook.  
 Postcondition: Team receives notification with room name, event type, and operator.
 
-**UC-10: Query Room Status via Teams Bot**  
+**UC-10: Transfer Room Contents (Two-Step Assignment)**  
+Actor: Gardener, Master Grower  
+Precondition: Rooms exist; transfer flag visible in LegendPanel.  
+Flow (Desktop): Operator drags the ⇄ Transfer flag onto the **origin** room — the room begins flashing amber and a status banner "SELECT DESTINATION — ESC to cancel" appears. Operator drags the Transfer flag onto the **destination** room — an animated amber dashed line with arrowhead connects the two rooms and the origin room retains the ⇄ symbol.  
+Flow (Mobile): Operator taps the ⇄ Transfer flag in the LegendPanel (selectedFlagId = 'transfer'). Taps origin room — flashes begin. Taps destination room — line connects them.  
+Postcondition: Transfer record created in Zustand `transfers` state keyed by originId. Line visible on map. Opening the origin room's drawer shows a Transfer info card with destination, type, scheduled date, and notes.  
+Cancel: Press Escape (desktop) to cancel the pending origin selection; transfer symbol removed.
+
+**UC-11: Edit or Remove a Transfer**  
+Actor: Gardener, Master Grower  
+Precondition: Transfer has been assigned (origin + destination set).  
+Flow: Operator opens origin room drawer → sees Transfer card → clicks "✏ Edit Transfer" → TransferModal opens. Can change destination room, transfer type, scheduled date/time, and notes. Can click "Remove Transfer" to delete the record and remove the connecting line.  
+Postcondition: Transfer record updated or deleted; line on map updated accordingly.
+
+**UC-12: Query Room Status via Teams Bot**  
 Actor: Any role  
 Precondition: Teams bot deployed and active in the team's channel.  
 Flow: User sends "Status [Room Name]" in Teams channel; bot queries DB; replies with Adaptive Card showing mode, active flags, last spray log, and timestamp.  
 Postcondition: User receives up-to-date status summary inside Teams.
 
-**UC-11: Sync Harvest Event to Outlook Calendar**  
+**UC-13: Sync Harvest Event to Outlook Calendar**  
 Actor: Master Grower, Director of Cultivation  
 Precondition: Microsoft Graph API credentials configured; harvest flag placed.  
 Flow: Backend creates calendar event via Graph API `POST /me/events` with room name, date, and operator details.  
@@ -885,7 +899,98 @@ jobs:
 
 ---
 
-## 17. Future Features (Planned)
+## 17. Transfer Feature Specification
+
+### Overview
+
+The Transfer feature allows operators to declare that the contents of one room will be (or are being) moved to another room. It uses a two-step assignment interaction that works identically for drag-and-drop (desktop) and tap-to-assign (mobile).
+
+### Interaction Model
+
+**Step 1 — Origin selection**
+- Desktop: drag the ⇄ Transfer flag from LegendPanel and drop it on the origin room.
+- Mobile: tap ⇄ in LegendPanel (activates selectedFlagId = 'transfer'), then tap the origin room.
+- Effect: origin room gains the ⇄ symbol, begins amber pulsing animation, `pendingTransferOrigin` set in Zustand. A banner appears: "SELECT DESTINATION ROOM — ESC to cancel". All other interactive rooms highlight as eligible destinations.
+
+**Step 2 — Destination selection**
+- Desktop: drag the ⇄ Transfer flag and drop it on the destination room.
+- Mobile: tap any room while `pendingTransferOrigin` is set (no flag re-selection needed).
+- Effect: `transfers[originId] = { destinationId, transferType, transferDate, notes, createdAt }` stored in Zustand. An animated amber dashed line with arrowhead is drawn from origin → destination on the SVG map. Banner dismissed.
+
+**Cancel**: Press Escape (desktop) or any mechanism that clears `pendingTransferOrigin`. The ⇄ symbol is removed from the origin room.
+
+### State Shape
+
+```javascript
+// facilityStore.js
+transfers: {
+  'F7': {                          // keyed by origin room ID
+    destinationId: 'F9',
+    transferType: 'Transplant',    // Transplant | Clone Run | Trim/Process | Harvest Move | Mother Move | Other
+    transferDate: '2026-03-10T09:00:00.000Z',  // nullable
+    notes: '',
+    createdAt: '2026-03-05T19:00:00.000Z',
+  }
+},
+pendingTransferOrigin: null,       // roomId | null — set during step 1
+```
+
+### Visual Components
+
+**TransferLine** (`client/src/components/TransferLine.jsx`)
+- Pure SVG component; receives `x1, y1, x2, y2` screen coordinates (computed from tile centers using the `iso()` function).
+- Renders: amber glow underlay, animated dashed line (`stroke-dashoffset` animation for marching-ants effect), SVG `<marker>` arrowhead at destination, origin dot, and transfer type label at midpoint.
+- Rendered above all room tiles in the SVG painter order.
+
+**Pending Origin Flash**
+- Two SVG polygon overlays on the origin tile: amber fill with pulsing opacity animation, amber stroke with `stroke-opacity` animation. Duration: 0.9s.
+
+**Eligible Destination Highlight**
+- While `pendingTransferOrigin` is set, all other interactive tiles show a dashed amber border overlay.
+
+### Edit & Remove (TransferModal)
+
+Accessible via the **Transfer info card** in the origin room's drawer (Overview tab).
+
+Fields:
+| Field | Type | Notes |
+|---|---|---|
+| Destination Room | Select | All interactive rooms except origin |
+| Transfer Type | Select | Transplant / Clone Run / Trim / Harvest Move / Mother Move / Other |
+| Scheduled Date & Time | datetime-local | Optional |
+| Notes | textarea | Optional |
+
+Actions:
+- **Save** — updates `transfers[originId]` in Zustand; line label updates immediately.
+- **Remove Transfer** — deletes the transfer record, removes ⇄ symbol from origin room, removes line.
+- **Cancel** — closes modal with no changes.
+
+The **destination** room's drawer shows an "Incoming transfer" read-only card pointing back to the origin; editing must be done from the origin room.
+
+### Future: API Persistence
+
+Currently transfers are stored in Zustand only (client-side, ephemeral). A future `transfers` table should be added to the Drizzle schema:
+
+```typescript
+export const roomTransfers = pgTable('room_transfers', {
+  id:           text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  originId:     text('origin_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
+  destinationId: text('destination_id').notNull().references(() => rooms.id),
+  transferType: text('transfer_type').notNull().default('Transplant'),
+  transferDate: timestamp('transfer_date'),
+  notes:        text('notes'),
+  completedAt:  timestamp('completed_at'),  // null = pending
+  operatorId:   text('operator_id').notNull(),
+  operatorName: text('operator_name').notNull(),
+  createdAt:    timestamp('created_at').notNull().defaultNow(),
+})
+```
+
+API routes: `POST /api/transfers`, `PATCH /api/transfers/:id`, `DELETE /api/transfers/:id`, `GET /api/rooms/:id/transfers`.
+
+---
+
+## 18. Future Features (Planned)
 
 - **Multi-facility support** — Top-level facility selector; `Facility` model added to schema with rooms scoped per facility.
 - **Role-based access control UI** — Admin panel for Director to assign roles via Stack Auth management API; read-only view for auditors.
