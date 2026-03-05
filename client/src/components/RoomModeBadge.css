@@ -1,0 +1,64 @@
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 2px 5px;
+  border-radius: 3px;
+  white-space: nowrap;
+  line-height: 1;
+  border: 1px solid rgba(0,0,0,0.25);
+}
+
+/* ── Mode colours ─────────────────────────────────────────── */
+.mode-veg {
+  background: #1a6b3a;
+  color: #b8ffd2;
+  box-shadow: 0 0 6px rgba(26, 107, 58, 0.7);
+}
+
+.mode-flower {
+  background: #6b2d6b;
+  color: #f5c6f5;
+  box-shadow: 0 0 6px rgba(107, 45, 107, 0.7);
+}
+
+.mode-flush {
+  background: #1e5a7a;
+  color: #b3eaff;
+  animation: shimmer 2s ease-in-out infinite;
+  box-shadow: 0 0 6px rgba(30, 90, 122, 0.7);
+}
+
+.mode-dry {
+  background: #7a5a1e;
+  color: #ffedb3;
+  box-shadow: 0 0 4px rgba(122, 90, 30, 0.5);
+}
+
+.mode-idle {
+  background: #333;
+  color: #999;
+  border-color: #555;
+}
+
+.mode-maintenance {
+  background: #8b3a00;
+  color: #ffcf99;
+  animation: pulse-maint 1.5s ease-in-out infinite;
+  box-shadow: 0 0 8px rgba(139, 58, 0, 0.8);
+}
+
+/* ── Animations ───────────────────────────────────────────── */
+@keyframes shimmer {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.6; }
+}
+
+@keyframes pulse-maint {
+  0%, 100% { box-shadow: 0 0 6px rgba(139, 58, 0, 0.8); }
+  50%       { box-shadow: 0 0 14px rgba(255, 100, 0, 1); }
+}

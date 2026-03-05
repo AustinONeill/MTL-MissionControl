@@ -1,0 +1,24 @@
+{
+  "name": "mtl-missioncontrol-worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^0.10.4",
+    "@prisma/adapter-neon": "^6.5.0",
+    "@prisma/client": "^6.5.0",
+    "aws4fetch": "^1.0.20",
+    "hono": "^4.7.7",
+    "jose": "^5.10.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20250309.0",
+    "prisma": "^6.5.0",
+    "typescript": "^5.8.2",
+    "wrangler": "^4.4.0"
+  }
+}

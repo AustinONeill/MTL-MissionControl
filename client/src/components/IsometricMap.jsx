@@ -1,7 +1,9 @@
-import { useMemo, useState, useCallback } from 'react'
+import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useFacilityStore, STATUS } from '../store/facilityStore'
 import { DefoliationInfoModal } from './DefoliationModal'
 import QuickLogModal from './QuickLogModal'
+import RoomModeBadge from './RoomModeBadge'
+import ReEntryBadge from './ReEntryBadge'
 
 // ─── Isometric projection constants ────────────────────────────────────────────
 const TW = 88   // tile width  (screen px per grid unit)
@@ -149,7 +151,7 @@ const LAYOUT = [
 
 // ─── Single isometric box tile ───────────────────────────────────────────────
 function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover, onDefolClick,
-                  isDragOver, onDragEnter, onDragLeave, onDrop }) {
+                  isDragOver, onDragEnter, onDragLeave, onDrop, onTap }) {
   const { col, row, w, h } = room
   const s = (gx, gy) => ({ x: ox + iso(gx, gy).x, y: oy + iso(gx, gy).y })
 
@@ -310,6 +312,25 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
         </text>
       )}
 
+      {/* Mode badge — top-left of top face */}
+      {room.interactive && room.mode && (
+        <RoomModeBadge
+          mode={room.mode}
+          x={TL.x + (TR.x - TL.x) * 0.05}
+          y={TL.y + (BL.y - TL.y) * 0.08 - 9}
+        />
+      )}
+
+      {/* Re-entry countdown badge — below mode badge */}
+      {room.interactive && room.reEntryExpiresAt && (
+        <ReEntryBadge
+          roomId={room.id}
+          reEntryExpiresAt={room.reEntryExpiresAt}
+          x={TL.x + (TR.x - TL.x) * 0.05}
+          y={TL.y + (BL.y - TL.y) * 0.08 + 10}
+        />
+      )}
+
       {/* Non-interactive wing label */}
       {!room.interactive && room.id === '_WING' && (
         <text
@@ -396,10 +417,27 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
 
 // ─── Main isometric map component ───────────────────────────────────────────
 export default function IsometricMap() {
-  const rooms         = useFacilityStore(s => s.rooms)
-  const selectRoom    = useFacilityStore(s => s.selectRoom)
-  const selectedId    = useFacilityStore(s => s.selectedRoomId)
-  const openDefolInfo = useFacilityStore(s => s.openDefolInfo)
+  const rooms            = useFacilityStore(s => s.rooms)
+  const selectRoom       = useFacilityStore(s => s.selectRoom)
+  const selectedId       = useFacilityStore(s => s.selectedRoomId)
+  const openDefolInfo    = useFacilityStore(s => s.openDefolInfo)
+  const loadRooms        = useFacilityStore(s => s.loadRooms)
+  const connectRoomWs    = useFacilityStore(s => s.connectRoomWs)
+  const selectedFlagId   = useFacilityStore(s => s.selectedFlagId)
+  const clearSelectedFlag = useFacilityStore(s => s.clearSelectedFlag)
+  const addSymbolToRoom  = useFacilityStore(s => s.addSymbolToRoom)
+  const apiStatus        = useFacilityStore(s => s.apiStatus)
+
+  // Load rooms from API on mount; connect WebSocket per room
+  useEffect(() => {
+    loadRooms()
+  }, [loadRooms])
+
+  useEffect(() => {
+    if (apiStatus === 'online') {
+      rooms.filter(r => r.id && !r.id.startsWith('_')).forEach(r => connectRoomWs(r.id))
+    }
+  }, [apiStatus, rooms, connectRoomWs])
 
   // Hover state
   const [hoveredId, setHoveredId] = useState(null)
@@ -463,6 +501,16 @@ export default function IsometricMap() {
 
   return (
     <div className="iso-container">
+      {apiStatus === 'offline' && (
+        <div style={{
+          position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)',
+          background: '#3a1a00', color: '#ffb060', border: '1px solid #ff8c00',
+          borderRadius: 4, padding: '4px 12px', fontSize: 11,
+          fontFamily: "'JetBrains Mono', monospace", zIndex: 10, whiteSpace: 'nowrap',
+        }}>
+          OFFLINE — changes will sync on reconnect
+        </div>
+      )}
       <svg
         viewBox={`0 0 ${svgW} ${svgH}`}
         width={svgW}
@@ -503,11 +551,20 @@ export default function IsometricMap() {
               ox={ox}
               oy={oy}
               colors={{ top: fc.top, left: fc.left, right: fc.right, stroke: fc.stroke, label: fc.label }}
-              onClick={() => tile.interactive && selectRoom(tile.id)}
+              onClick={() => {
+                if (!tile.interactive) return
+                // Mobile tap-to-assign: if a flag is selected, assign it
+                if (selectedFlagId) {
+                  addSymbolToRoom(tile.id, selectedFlagId, selectedFlagId)
+                  clearSelectedFlag()
+                } else {
+                  selectRoom(tile.id)
+                }
+              }}
               isSelected={selectedId === tile.id}
               isHovered={hoveredId === tile.id}
+              isDragOver={dragOverId === tile.id || (selectedFlagId && hoveredId === tile.id)}
               onHover={setHoveredId}
-              isDragOver={dragOverId === tile.id}
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}

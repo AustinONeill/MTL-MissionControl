@@ -17,61 +17,81 @@ export const SYMBOLS = {
   ISSUE:        'issue',
 }
 
-// Accurate room inventory from facility floor plan
-// type: 'flower' | 'veg' | 'utility' | 'support' | 'wing'
+export const MODES = {
+  VEG:         'veg',
+  FLOWER:      'flower',
+  FLUSH:       'flush',
+  DRY:         'dry',
+  IDLE:        'idle',
+  MAINTENANCE: 'maintenance',
+}
+
+// ── Offline-first seed data ────────────────────────────────────────────────
 const initialRooms = [
-  // ── VEG ROOMS ──────────────────────────────────────────────────────────────
-  { id: 'VEG1', name: 'VEG 1', type: 'veg',     stage: 'Veg Day 18',  batch: 'BTH-V01', status: STATUS.NORMAL, symbols: [] },
-  { id: 'VEG2', name: 'VEG 2', type: 'veg',     stage: 'Veg Day 10',  batch: 'BTH-V02', status: STATUS.WARN,   symbols: [SYMBOLS.IPM] },
-  { id: 'VEG3', name: 'VEG 3', type: 'veg',     stage: 'Veg Day 24',  batch: 'BTH-V03', status: STATUS.NORMAL, symbols: [SYMBOLS.TRANSFER] },
-  { id: 'VEG4', name: 'VEG 4', type: 'veg',     stage: 'Veg Day 30',  batch: 'BTH-V04', status: STATUS.NORMAL, symbols: [] },
-
-  // ── FLOWER ROOMS ────────────────────────────────────────────────────────────
-  // Column A – left cultivation column
-  { id: 'F9',  name: 'F9',  type: 'flower', stage: 'Flower Day 7',  batch: 'BTH-F09', status: STATUS.NORMAL, symbols: [] },
-  { id: 'F8',  name: 'F8',  type: 'flower', stage: 'Flower Day 14', batch: 'BTH-F08', status: STATUS.WARN,   symbols: [SYMBOLS.IPM, SYMBOLS.ISSUE] },
-  { id: 'F7',  name: 'F7',  type: 'flower', stage: 'Flower Day 21', batch: 'BTH-F07', status: STATUS.NORMAL, symbols: [SYMBOLS.DEFOLIATION] },
-  { id: 'F6',  name: 'F6',  type: 'flower', stage: 'Flower Day 28', batch: 'BTH-F06', status: STATUS.NORMAL, symbols: [] },
-  { id: 'F5',  name: 'F5',  type: 'flower', stage: 'Flower Day 35', batch: 'BTH-F05', status: STATUS.ALERT,  symbols: [SYMBOLS.ISSUE] },
-
-  // Column B – center cultivation column
-  { id: 'F14', name: 'F14', type: 'flower', stage: 'Flower Day 42', batch: 'BTH-F14', status: STATUS.NORMAL, symbols: [SYMBOLS.CALENDAR] },
-  { id: 'F13', name: 'F13', type: 'flower', stage: 'Flower Day 49', batch: 'BTH-F13', status: STATUS.NORMAL, symbols: [] },
-  { id: 'F12', name: 'F12', type: 'flower', stage: 'Flower Day 56', batch: 'BTH-F12', status: STATUS.NORMAL, symbols: [SYMBOLS.SUPPLY_READY] },
-  { id: 'F11', name: 'F11', type: 'flower', stage: 'Harvest Week',  batch: 'BTH-F11', status: STATUS.NORMAL, symbols: [] },
-  { id: 'F10', name: 'F10', type: 'flower', stage: 'Flower Day 7',  batch: 'BTH-F10', status: STATUS.WARN,   symbols: [SYMBOLS.MODE_CHANGE] },
-
-  // Column C right – east section (2 sub-columns wide)
-  { id: 'F17', name: 'F17', type: 'flower', stage: 'Flower Day 14', batch: 'BTH-F17', status: STATUS.NORMAL, symbols: [] },
-  { id: 'F18', name: 'F18', type: 'flower', stage: 'Flower Day 21', batch: 'BTH-F18', status: STATUS.ALERT,  symbols: [SYMBOLS.ISSUE] },
-  { id: 'F15', name: 'F15', type: 'flower', stage: 'Flower Day 28', batch: 'BTH-F15', status: STATUS.NORMAL, symbols: [SYMBOLS.CALENDAR] },
-  { id: 'F16', name: 'F16', type: 'flower', stage: 'Flower Day 35', batch: 'BTH-F16', status: STATUS.NORMAL, symbols: [] },
-
-  // ── KEY SUPPORT (gardener-relevant) ────────────────────────────────────────
-  { id: 'LIVCLONE', name: 'LIVING & CLONING', type: 'support', stage: 'Week 3', batch: null, status: STATUS.NORMAL, symbols: [] },
-  { id: 'PREVEG',   name: 'PRE-VEG',          type: 'support', stage: 'Active', batch: null, status: STATUS.NORMAL, symbols: [] },
-  { id: 'PLANTING', name: 'PLANTING',          type: 'support', stage: 'Active', batch: null, status: STATUS.NORMAL, symbols: [] },
-
-  // ── DRY ROOMS ───────────────────────────────────────────────────────────────
-  { id: 'DRY1', name: 'DRY 1', type: 'utility', stage: 'Curing', batch: 'BTH-DRY1', status: STATUS.NORMAL, symbols: [] },
-  { id: 'DRY2', name: 'DRY 2', type: 'utility', stage: 'Curing', batch: 'BTH-DRY2', status: STATUS.NORMAL, symbols: [] },
-  { id: 'DRY3', name: 'DRY 3', type: 'utility', stage: 'Empty',  batch: null,       status: STATUS.IDLE,   symbols: [] },
-  { id: 'DRY4', name: 'DRY 4', type: 'utility', stage: 'Empty',  batch: null,       status: STATUS.IDLE,   symbols: [] },
-  { id: 'DRY5', name: 'DRY 5', type: 'utility', stage: 'Curing', batch: 'BTH-DRY5', status: STATUS.NORMAL, symbols: [] },
+  { id: 'VEG1', name: 'VEG 1', type: 'veg',     mode: MODES.VEG,    stage: 'Veg Day 18',  status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'VEG2', name: 'VEG 2', type: 'veg',     mode: MODES.VEG,    stage: 'Veg Day 10',  status: STATUS.WARN,   symbols: [SYMBOLS.IPM], flags: [], reEntryExpiresAt: null },
+  { id: 'VEG3', name: 'VEG 3', type: 'veg',     mode: MODES.VEG,    stage: 'Veg Day 24',  status: STATUS.NORMAL, symbols: [SYMBOLS.TRANSFER], flags: [], reEntryExpiresAt: null },
+  { id: 'VEG4', name: 'VEG 4', type: 'veg',     mode: MODES.VEG,    stage: 'Veg Day 30',  status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'F9',  name: 'F9',  type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 7',  status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'F8',  name: 'F8',  type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 14', status: STATUS.WARN,   symbols: [SYMBOLS.IPM, SYMBOLS.ISSUE], flags: [], reEntryExpiresAt: null },
+  { id: 'F7',  name: 'F7',  type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 21', status: STATUS.NORMAL, symbols: [SYMBOLS.DEFOLIATION], flags: [], reEntryExpiresAt: null },
+  { id: 'F6',  name: 'F6',  type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 28', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'F5',  name: 'F5',  type: 'flower', mode: MODES.FLUSH,  stage: 'Flower Day 35', status: STATUS.ALERT,  symbols: [SYMBOLS.ISSUE], flags: [], reEntryExpiresAt: null },
+  { id: 'F14', name: 'F14', type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 42', status: STATUS.NORMAL, symbols: [SYMBOLS.CALENDAR], flags: [], reEntryExpiresAt: null },
+  { id: 'F13', name: 'F13', type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 49', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'F12', name: 'F12', type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 56', status: STATUS.NORMAL, symbols: [SYMBOLS.SUPPLY_READY], flags: [], reEntryExpiresAt: null },
+  { id: 'F11', name: 'F11', type: 'flower', mode: MODES.FLUSH,  stage: 'Harvest Week',  status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'F10', name: 'F10', type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 7',  status: STATUS.WARN,   symbols: [SYMBOLS.MODE_CHANGE], flags: [], reEntryExpiresAt: null },
+  { id: 'F17', name: 'F17', type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 14', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'F18', name: 'F18', type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 21', status: STATUS.ALERT,  symbols: [SYMBOLS.ISSUE], flags: [], reEntryExpiresAt: null },
+  { id: 'F15', name: 'F15', type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 28', status: STATUS.NORMAL, symbols: [SYMBOLS.CALENDAR], flags: [], reEntryExpiresAt: null },
+  { id: 'F16', name: 'F16', type: 'flower', mode: MODES.FLOWER, stage: 'Flower Day 35', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'LIVCLONE', name: 'LIVING & CLONING', type: 'support', mode: MODES.VEG,    stage: 'Week 3', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'PREVEG',   name: 'PRE-VEG',          type: 'support', mode: MODES.VEG,    stage: 'Active', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'PLANTING', name: 'PLANTING',          type: 'support', mode: MODES.VEG,    stage: 'Active', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'DRY1', name: 'DRY 1', type: 'utility', mode: MODES.DRY,  stage: 'Curing', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'DRY2', name: 'DRY 2', type: 'utility', mode: MODES.DRY,  stage: 'Curing', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'DRY3', name: 'DRY 3', type: 'utility', mode: MODES.IDLE, stage: 'Empty',  status: STATUS.IDLE,   symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'DRY4', name: 'DRY 4', type: 'utility', mode: MODES.IDLE, stage: 'Empty',  status: STATUS.IDLE,   symbols: [], flags: [], reEntryExpiresAt: null },
+  { id: 'DRY5', name: 'DRY 5', type: 'utility', mode: MODES.DRY,  stage: 'Curing', status: STATUS.NORMAL, symbols: [], flags: [], reEntryExpiresAt: null },
 ]
 
-// 6 growing tables per room, each split into left + right half
+// ── Defoliation seed ──────────────────────────────────────────────────────
 const makeEmptyTables = () =>
   Array.from({ length: 6 }, (_, i) => ({ id: i, left: false, right: false }))
 
+// ── API helpers ───────────────────────────────────────────────────────────
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem('stack-auth-token')
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw Object.assign(new Error(err.error ?? `HTTP ${res.status}`), { status: res.status })
+  }
+  return res.status === 204 ? null : res.json()
+}
+
+// ── Store ─────────────────────────────────────────────────────────────────
 export const useFacilityStore = create((set, get) => ({
   rooms: initialRooms,
   selectedRoomId: null,
   drawerOpen: false,
+  apiStatus: 'offline', // 'loading' | 'online' | 'offline'
 
-  // defoliationTables: { [roomId]: [{id, left, right}, ...×6] }
+  // Mobile flag selection
+  selectedFlagId: null,
+
+  // Defoliation
   defoliationTables: {
-    // seed F7 with some progress so it's visible immediately
     'F7': [
       { id: 0, left: true,  right: true  },
       { id: 1, left: true,  right: false },
@@ -81,39 +101,144 @@ export const useFacilityStore = create((set, get) => ({
       { id: 5, left: false, right: false },
     ],
   },
-
-  // Defoliation info modal (opened from scissors glyph on map)
   defolInfoRoomId: null,
+
+  // WebSocket connections per roomId
+  _wsMap: {},
+
+  // ── Load rooms from API ──────────────────────────────────────────────────
+  loadRooms: async () => {
+    if (!API_BASE) return
+    set({ apiStatus: 'loading' })
+    try {
+      const rooms = await apiFetch('/api/rooms')
+      set({ rooms, apiStatus: 'online' })
+      // Persist snapshot for offline fallback
+      try {
+        localStorage.setItem('mtl-rooms-snapshot', JSON.stringify(rooms))
+      } catch { /* storage full */ }
+    } catch {
+      // Use cached snapshot if available
+      try {
+        const snap = localStorage.getItem('mtl-rooms-snapshot')
+        if (snap) set({ rooms: JSON.parse(snap) })
+      } catch { /* ignore */ }
+      set({ apiStatus: 'offline' })
+    }
+  },
+
+  // ── Connect WebSocket to room Durable Object ─────────────────────────────
+  connectRoomWs: (roomId) => {
+    if (!API_BASE) return
+    const { _wsMap } = get()
+    if (_wsMap[roomId]) return // already connected
+
+    const wsUrl = API_BASE.replace(/^http/, 'ws') + `/ws/rooms/${roomId}`
+    const ws = new WebSocket(wsUrl)
+
+    ws.onmessage = (evt) => {
+      try {
+        const msg = JSON.parse(evt.data)
+        if (msg.type === 'ROOM_UPDATED' && msg.room) {
+          set((state) => ({
+            rooms: state.rooms.map((r) => (r.id === msg.room.id ? { ...r, ...msg.room } : r)),
+          }))
+        }
+      } catch { /* ignore bad frames */ }
+    }
+
+    ws.onclose = () => {
+      set((state) => {
+        const m = { ...state._wsMap }
+        delete m[roomId]
+        return { _wsMap: m }
+      })
+      // Reconnect after 3s
+      setTimeout(() => get().connectRoomWs(roomId), 3000)
+    }
+
+    set((state) => ({ _wsMap: { ...state._wsMap, [roomId]: ws } }))
+  },
+
+  // ── UI actions ──────────────────────────────────────────────────────────
   openDefolInfo:  (roomId) => set({ defolInfoRoomId: roomId }),
   closeDefolInfo: ()       => set({ defolInfoRoomId: null }),
+  selectRoom:     (roomId) => set({ selectedRoomId: roomId, drawerOpen: true }),
+  closeDrawer:    ()       => set({ selectedRoomId: null, drawerOpen: false }),
+  getRoom:        (roomId) => get().rooms.find(r => r.id === roomId),
 
-  selectRoom: (roomId) => set({ selectedRoomId: roomId, drawerOpen: true }),
-  closeDrawer: () => set({ selectedRoomId: null, drawerOpen: false }),
-  getRoom: (roomId) => get().rooms.find(r => r.id === roomId),
+  // Mobile: select a flag type for tap-to-assign
+  selectFlag: (flagId) => set((state) => ({
+    selectedFlagId: state.selectedFlagId === flagId ? null : flagId,
+  })),
+  clearSelectedFlag: () => set({ selectedFlagId: null }),
 
-  updateRoomStatus: (roomId, status) =>
-    set(state => ({
-      rooms: state.rooms.map(r => r.id === roomId ? { ...r, status } : r),
-    })),
+  // ── Room mode ────────────────────────────────────────────────────────────
+  updateRoomMode: async (roomId, mode) => {
+    // Optimistic update
+    set((state) => ({
+      rooms: state.rooms.map(r => r.id === roomId ? { ...r, mode } : r),
+    }))
+    try {
+      await apiFetch(`/api/rooms/${roomId}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ mode }),
+      })
+    } catch {
+      // Revert on failure — handled by WS broadcast on next reconnect
+    }
+  },
 
-  addSymbolToRoom: (roomId, symbol) =>
-    set(state => ({
+  // ── Flags (symbols) ──────────────────────────────────────────────────────
+  addSymbolToRoom: async (roomId, symbol, flagId) => {
+    // Optimistic update
+    set((state) => ({
       rooms: state.rooms.map(r =>
         r.id === roomId && !r.symbols.includes(symbol)
           ? { ...r, symbols: [...r.symbols, symbol] }
           : r
       ),
-    })),
+    }))
+    if (flagId && API_BASE) {
+      try {
+        await apiFetch(`/api/rooms/${roomId}/flags`, {
+          method: 'POST',
+          body: JSON.stringify({ flagId }),
+        })
+      } catch { /* offline — queued automatically by the UI layer */ }
+    }
+  },
 
-  removeSymbolFromRoom: (roomId, symbol) =>
-    set(state => ({
+  removeSymbolFromRoom: async (roomId, symbol, flagId) => {
+    set((state) => ({
       rooms: state.rooms.map(r =>
         r.id === roomId
           ? { ...r, symbols: r.symbols.filter(s => s !== symbol) }
           : r
       ),
+    }))
+    if (flagId && API_BASE) {
+      try {
+        await apiFetch(`/api/rooms/${roomId}/flags/${flagId}`, { method: 'DELETE' })
+      } catch { /* offline */ }
+    }
+  },
+
+  // ── Re-entry countdown ──────────────────────────────────────────────────
+  clearReEntry: (roomId) =>
+    set((state) => ({
+      rooms: state.rooms.map(r =>
+        r.id === roomId ? { ...r, reEntryExpiresAt: null } : r
+      ),
     })),
 
+  // ── Status (legacy — kept for existing map rendering) ────────────────────
+  updateRoomStatus: (roomId, status) =>
+    set(state => ({
+      rooms: state.rooms.map(r => r.id === roomId ? { ...r, status } : r),
+    })),
+
+  // ── Defoliation ──────────────────────────────────────────────────────────
   toggleDefolHalf: (roomId, tableId, half) =>
     set(state => {
       const current = state.defoliationTables[roomId] ?? makeEmptyTables()

@@ -1,0 +1,111 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Room {
+  id               String           @id @default(uuid())
+  name             String
+  col              Int
+  row              Int
+  width            Int              @default(1)
+  height           Int              @default(1)
+  type             String           @default("flower") // "veg"|"flower"|"dry"|"support"|"office"
+  mode             String           @default("idle")   // "veg"|"flower"|"flush"|"dry"|"idle"|"maintenance"
+  reEntryExpiresAt DateTime?
+  flags            RoomFlag[]
+  events           EventLog[]
+  sprayLogs        SprayLog[]
+  calibrationLogs  CalibrationLog[]
+  updatedAt        DateTime         @updatedAt
+  createdAt        DateTime         @default(now())
+
+  @@index([mode])
+}
+
+model Flag {
+  id                  String     @id @default(uuid())
+  type                String     @unique
+  label               String
+  iconUrl             String
+  color               String
+  notificationEnabled Boolean    @default(false)
+  calendarEnabled     Boolean    @default(false)
+  rooms               RoomFlag[]
+}
+
+model RoomFlag {
+  id         String   @id @default(uuid())
+  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId     String
+  flag       Flag     @relation(fields: [flagId], references: [id])
+  flagId     String
+  assignedBy String
+  assignedAt DateTime @default(now())
+
+  @@unique([roomId, flagId])
+  @@index([roomId])
+  @@index([flagId])
+}
+
+model SprayLog {
+  id               String   @id @default(uuid())
+  room             Room     @relation(fields: [roomId], references: [id])
+  roomId           String
+  product          String
+  rate             String
+  method           String?
+  pcpRegNumber     String?
+  operatorId       String
+  operatorName     String
+  appliedAt        DateTime
+  reEntryHours     Float
+  reEntryExpiresAt DateTime
+  photoUrl         String?
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  @@index([roomId])
+  @@index([appliedAt])
+}
+
+model CalibrationLog {
+  id            String   @id @default(uuid())
+  room          Room     @relation(fields: [roomId], references: [id])
+  roomId        String
+  equipmentType String
+  preReading    Float
+  standard      String
+  postReading   Float
+  passFail      Boolean
+  operatorId    String
+  operatorName  String
+  calibratedAt  DateTime
+  photoUrl      String?
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([roomId])
+  @@index([calibratedAt])
+}
+
+model EventLog {
+  id            String   @id @default(uuid())
+  room          Room     @relation(fields: [roomId], references: [id])
+  roomId        String
+  operatorId    String
+  operatorName  String
+  action        String
+  previousValue String?
+  newValue      String?
+  source        String   @default("UI")
+  createdAt     DateTime @default(now())
+
+  @@index([roomId])
+  @@index([createdAt])
+}
