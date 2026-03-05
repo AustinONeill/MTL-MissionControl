@@ -46,7 +46,7 @@ export interface Env {
   AZURE_AD_CLIENT_SECRET: string
   AZURE_AD_TENANT_ID: string
   ROOM_DO: DurableObjectNamespace
-  R2_BUCKET: R2Bucket
+  R2_BUCKET?: R2Bucket
 }
 
 export interface HonoVariables {

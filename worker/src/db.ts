@@ -1,9 +1,9 @@
 import { neon } from '@neondatabase/serverless'
-import { PrismaNeon } from '@prisma/adapter-neon'
-import { PrismaClient } from '@prisma/client'
+import { drizzle } from 'drizzle-orm/neon-http'
+import * as schema from './schema'
 
-export function getDb(databaseUrl: string): PrismaClient {
-  const sql = neon(databaseUrl)
-  const adapter = new PrismaNeon(sql)
-  return new PrismaClient({ adapter } as any)
+export function getDb(databaseUrl: string) {
+  return drizzle(neon(databaseUrl), { schema })
 }
+
+export type Db = ReturnType<typeof getDb>

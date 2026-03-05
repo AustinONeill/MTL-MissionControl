@@ -1,15 +1,13 @@
-export class RoomDurableObject {
-  private state: DurableObjectState
-  private sessions: Set<WebSocket> = new Set()
+import { DurableObject } from 'cloudflare:workers'
+import type { Env } from '../types'
 
-  constructor(state: DurableObjectState) {
-    this.state = state
-  }
+export class RoomDurableObject extends DurableObject<Env> {
+  private sessions: Set<WebSocket> = new Set()
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url)
 
-    // Internal broadcast call from a Worker
+    // Internal broadcast from a Worker route handler
     if (url.pathname === '/broadcast' && request.method === 'POST') {
       const payload = await request.text()
       this.broadcast(payload)
@@ -17,22 +15,13 @@ export class RoomDurableObject {
     }
 
     // WebSocket upgrade from a browser client
-    const upgradeHeader = request.headers.get('Upgrade')
-    if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
+    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
       return new Response('Expected WebSocket', { status: 426 })
     }
 
     const { 0: client, 1: server } = new WebSocketPair()
-    this.state.acceptWebSocket(server)
+    this.ctx.acceptWebSocket(server)
     this.sessions.add(server)
-
-    server.addEventListener('close', () => {
-      this.sessions.delete(server)
-    })
-
-    server.addEventListener('error', () => {
-      this.sessions.delete(server)
-    })
 
     return new Response(null, { status: 101, webSocket: client })
   }
@@ -46,21 +35,18 @@ export class RoomDurableObject {
         dead.push(ws)
       }
     }
-    for (const ws of dead) {
-      this.sessions.delete(ws)
-    }
+    for (const ws of dead) this.sessions.delete(ws)
   }
 
-  // Called by the Workers runtime for hibernation-compatible WebSockets
-  webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): void {
-    // Clients don't send messages; ignore
+  override webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer): void {
+    // Clients are read-only — no inbound messages expected
   }
 
-  webSocketClose(ws: WebSocket): void {
+  override webSocketClose(ws: WebSocket): void {
     this.sessions.delete(ws)
   }
 
-  webSocketError(ws: WebSocket): void {
+  override webSocketError(ws: WebSocket): void {
     this.sessions.delete(ws)
   }
 }

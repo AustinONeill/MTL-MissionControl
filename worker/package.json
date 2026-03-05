@@ -5,19 +5,21 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:generate": "drizzle-kit generate",
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
-    "@prisma/adapter-neon": "^6.5.0",
-    "@prisma/client": "^6.5.0",
     "aws4fetch": "^1.0.20",
+    "drizzle-orm": "^0.41.0",
     "hono": "^4.7.7",
     "jose": "^5.10.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250309.0",
-    "prisma": "^6.5.0",
+    "drizzle-kit": "^0.30.0",
     "typescript": "^5.8.2",
     "wrangler": "^4.4.0"
   }

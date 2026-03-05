@@ -2,6 +2,7 @@ name = "mtl-missioncontrol-api"
 main = "src/worker.ts"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
+account_id = "7c72baecd8d9d5e346b177043c3a95d1"
 
 [[durable_objects.bindings]]
 name = "ROOM_DO"
@@ -9,11 +10,12 @@ class_name = "RoomDurableObject"
 
 [[migrations]]
 tag = "v1"
-new_classes = ["RoomDurableObject"]
+new_sqlite_classes = ["RoomDurableObject"]
 
-[[r2_buckets]]
-binding = "R2_BUCKET"
-bucket_name = "mtl-photos"
+# R2 bucket — uncomment after enabling R2 in Cloudflare Dashboard
+# [[r2_buckets]]
+# binding = "R2_BUCKET"
+# bucket_name = "mtl-photos"
 
 # Secrets are set via: wrangler secret put <NAME>
 # DATABASE_URL
