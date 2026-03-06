@@ -14,51 +14,39 @@
 }
 
 /* ── Mode colours ─────────────────────────────────────────── */
-.mode-veg {
+.mode-off {
+  background: #222;
+  color: #666;
+  border-color: #444;
+}
+
+.mode-auto {
+  background: #1e4a7a;
+  color: #b3d8ff;
+  box-shadow: 0 0 5px rgba(30, 74, 122, 0.6);
+  animation: pulse-auto 2.5s ease-in-out infinite;
+}
+
+.mode-crop {
   background: #1a6b3a;
   color: #b8ffd2;
   box-shadow: 0 0 6px rgba(26, 107, 58, 0.7);
 }
 
-.mode-flower {
-  background: #6b2d6b;
-  color: #f5c6f5;
-  box-shadow: 0 0 6px rgba(107, 45, 107, 0.7);
-}
-
-.mode-flush {
-  background: #1e5a7a;
-  color: #b3eaff;
-  animation: shimmer 2s ease-in-out infinite;
-  box-shadow: 0 0 6px rgba(30, 90, 122, 0.7);
-}
-
-.mode-dry {
-  background: #7a5a1e;
-  color: #ffedb3;
-  box-shadow: 0 0 4px rgba(122, 90, 30, 0.5);
-}
-
-.mode-idle {
-  background: #333;
-  color: #999;
-  border-color: #555;
-}
-
-.mode-maintenance {
-  background: #8b3a00;
-  color: #ffcf99;
-  animation: pulse-maint 1.5s ease-in-out infinite;
-  box-shadow: 0 0 8px rgba(139, 58, 0, 0.8);
+.mode-fill {
+  background: #6b4a1e;
+  color: #ffd9b3;
+  box-shadow: 0 0 6px rgba(107, 74, 30, 0.7);
+  animation: shimmer-fill 2s ease-in-out infinite;
 }
 
 /* ── Animations ───────────────────────────────────────────── */
-@keyframes shimmer {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.6; }
+@keyframes pulse-auto {
+  0%, 100% { box-shadow: 0 0 4px rgba(30, 74, 122, 0.6); }
+  50%       { box-shadow: 0 0 10px rgba(80, 160, 255, 0.9); }
 }
 
-@keyframes pulse-maint {
-  0%, 100% { box-shadow: 0 0 6px rgba(139, 58, 0, 0.8); }
-  50%       { box-shadow: 0 0 14px rgba(255, 100, 0, 1); }
+@keyframes shimmer-fill {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.65; }
 }

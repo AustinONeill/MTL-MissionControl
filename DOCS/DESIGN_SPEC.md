@@ -4,7 +4,7 @@
 **Author:** Austin O'Neill  
 **Repository:** https://github.com/AustinONeill/MTL-MissionControl  
 **Date:** March 5, 2026  
-**Last Updated:** March 5, 2026 — Transfer Feature added
+**Last Updated:** March 6, 2026 — Overlay system redesign, SprayLog (F-005), NetModal, PotCheck, FilterChange, Site Calendar, Outlook export-only
 
 ---
 
@@ -26,9 +26,11 @@
 14. [Responsive Design Strategy](#14-responsive-design-strategy)
 15. [Integration Architecture](#15-integration-architecture)
 16. [Deployment Architecture](#16-deployment-architecture)
-17. [Future Features](#17-future-features)
-18. [Testing Strategy](#18-testing-strategy)
-19. [References](#19-references)
+17. [Transfer Feature Specification](#17-transfer-feature-specification)
+18. [Site Calendar](#18-site-calendar)
+19. [Future Features](#19-future-features)
+20. [Testing Strategy](#20-testing-strategy)
+21. [References](#21-references)
 
 ---
 
@@ -40,7 +42,7 @@ The application is divided into three distinct layers to ensure separation of co
 
 - Renders the isometric facility map using SVG with CSS transforms, deployed on **Cloudflare Pages**.
 - Displays the live-time header with a real-time clock updated every second.
-- Renders a **mode badge and/or animation** on each room tile indicating its current operational mode (Veg, Flower, Flush, Dry, Idle, Maintenance).
+- Renders a **mode badge and/or animation** on each room tile indicating its current operational mode (OFF, AUTO, CROP, FILL).
 - Manages the toolbox panel with draggable/droppable flag components (desktop) and tap-to-select/tap-to-assign (mobile).
 - Adapts all UI elements responsively across desktop, tablet, and mobile viewports.
 - Provides visual feedback on flag placement, drag interactions, status changes, and spray re-entry countdowns.
@@ -59,7 +61,7 @@ The application is divided into three distinct layers to ensure separation of co
 - Real-time multi-user state and conflict resolution via **Cloudflare Durable Objects** (one DO instance per room, identified by `roomId`).
 - Authentication and role-based session management handled by **Stack Auth**.
 - Photo attachments stored and compressed in **Cloudflare R2**.
-- Persistent relational data in **Neon** (serverless PostgreSQL) via Prisma with `@prisma/adapter-neon`.
+- Persistent relational data in **Neon** (serverless PostgreSQL) via **Drizzle ORM** with `@neondatabase/serverless`.
 - Microsoft Teams integration for outbound alerts and inbound bot queries.
 - Microsoft Graph API for Outlook Calendar read/write.
 
@@ -69,13 +71,13 @@ The application is divided into three distinct layers to ensure separation of co
 
 ### Actors
 
-- **Gardener** — Day-to-day floor operator; logs events, assigns flags, records spray and calibration entries.
+- **Gardener** — Day-to-day floor operator; logs events, assigns overlays, records spray and calibration entries.
 - **Pest Control Specialist** — Creates and manages spray logs; views IPM flag history and re-entry countdowns.
 - **Control / Automation Engineer** — Manages calibration logs for sensors and equipment; monitors room modes.
-- **Master Grower** — Views and updates room modes and flag state across all rooms; approves spray log entries.
+- **Master Grower / Supervisor** — Views and updates room modes and overlay state across all rooms; provides mandatory SUPV/APPV sign-off on spray log entries. The supervisor sign-off field is role-gated — only users with `master_grower` or `director` role can populate it, identified via Stack Auth session.
 - **Director of Cultivation** — Full read/review access across all rooms, logs, and reports; can purge audit records.
-- **Teams Bot** — Automated agent that sends/receives alerts tied to room flags via Microsoft Teams.
-- **Outlook Calendar** — External scheduling service that syncs harvest and maintenance events.
+- **Teams Bot** — Automated agent that sends/receives alerts tied to room overlays via Microsoft Teams.
+- **Outlook Calendar** — External scheduling service used as an export target for milestone events only (not the primary scheduling interface — see Section 18).
 
 ### Use Cases
 
@@ -110,10 +112,10 @@ Flow: Operator opens room detail drawer; selects new mode from dropdown; tile ba
 Postcondition: Room mode persisted and visible on the map in real time.
 
 **UC-06: Log Spray Event**  
-Actor: Pest Control Specialist, Gardener  
-Precondition: IPM flag is placed on a room.  
-Flow: Spray log form opens; operator records product name, rate, method, application date/time, and re-entry interval (hours). On save: entry persisted; re-entry countdown rendered on tile; Teams alert sent if configured.  
-Postcondition: Spray log persisted; room tile shows re-entry countdown badge.
+Actor: Pest Control Specialist, Gardener (operator fields); Master Grower / Director (SUPV/APPV sign-off)  
+Precondition: IPM overlay is placed on a room.  
+Flow: SprayLog modal opens (matching F-005 form); operator fills all required fields including batches, pesticide, times, reason, method, equipment, ratio, and quantity. The SUPV/APPV field is visible to all but **writeable only by users with `master_grower` or `director` role** (Stack Auth role claim enforced both client-side and on the API). On save: entry persisted; re-entry countdown rendered on tile from lookup table (or manual override); Teams alert sent if configured.  
+Postcondition: SprayLog persisted; room tile shows re-entry countdown badge.
 
 **UC-07: Log Calibration Event**  
 Actor: Control / Automation Engineer  
@@ -193,43 +195,160 @@ Postcondition: Full functionality available on touch screens without drag gestur
 
 ---
 
-## 4. Library & Service Usage
+## 4. Complete Technology Stack
 
 ### Frontend
 
-- **React + Vite:** Component-based UI, deployed to Cloudflare Pages.
-- **interact.js:** Drag-and-drop on desktop via pointer events.
-- **Day.js:** Live clock, timestamp formatting, re-entry countdown calculations.
-- **CSS Grid / CSS Transforms:** Isometric tile layout using `rotate(45deg) skewX(-20deg)`.
-- **Zustand:** Client-side state management.
+| Technology | Version | Role |
+|-----------|---------|------|
+| **React** | 19.2 | Component-based UI framework |
+| **Vite** | 7.3 | Build tool, dev server, HMR |
+| **Zustand** | 5.0 | Lightweight client-side state management |
+| **@stackframe/stack** | 2.8 | Stack Auth client SDK (sign-in UI, session management) |
+| **SVG (native)** | — | Isometric map rendering — pure SVG polygons, no canvas |
+| **CSS Custom Properties** | — | Theming (`--surface`, `--border`, `--text`, `--font-mono`) |
+| **HTML Drag and Drop API** | — | Overlay drag-from-toolbox to room tile |
+
+**Deployment:** Cloudflare Pages (direct Wrangler deploy from `dist/`)
+
+**No** React Router (single-page, no routes), Day.js, interact.js, or any charting library.
+
+---
 
 ### Auth
 
-- **Stack Auth:** Prebuilt sign-in UI, JWT session tokens, role-based claims. No custom user table required.
+| Technology | Version | Role |
+|-----------|---------|------|
+| **Stack Auth** | 2.8 | Hosted auth — Microsoft OAuth, JWT issuance, role claims |
+| **jose** | 5.10 | JWT signature verification in Cloudflare Workers (JWKS fetch) |
+| **Microsoft OAuth / Azure AD** | — | Identity provider via Stack Auth |
+
+**Roles:** `grower` · `master_grower` · `director` — stored as JWT claim, enforced per-endpoint in worker middleware.
+
+---
 
 ### Backend
 
-- **Hono:** Lightweight web framework for Cloudflare Workers. Replaces Express/Next.js — native Workers support, zero overhead.
-- **Cloudflare Workers:** Serverless edge runtime for the REST API and webhook receivers.
-- **Cloudflare Durable Objects:** Stateful edge objects providing WebSocket-based real-time broadcast per room. One DO instance per `roomId`.
-- **Prisma + `@prisma/adapter-neon`:** ORM connecting Workers to Neon PostgreSQL via HTTP driver (no persistent TCP required).
-- **Neon:** Serverless PostgreSQL; supports branching for staging/test environments.
+| Technology | Version | Role |
+|-----------|---------|------|
+| **Cloudflare Workers** | — | Serverless edge runtime, zero cold-start, global PoPs |
+| **Hono** | 4.7.7 | Web framework — routing, middleware, typed context |
+| **TypeScript** | 5.8 | Strict mode, `noUnusedLocals`, `noUnusedParameters` |
+| **Drizzle ORM** | 0.41 | Type-safe SQL query builder, schema-as-code |
+| **drizzle-kit** | 0.30 | Schema push (`drizzle-kit push`), studio, migrations |
+| **@neondatabase/serverless** | 0.10.4 | Neon HTTP driver — no persistent TCP, works in Workers |
+| **Cloudflare Durable Objects** | — | 1 DO instance per room — WebSocket hub + real-time broadcast |
+| **Cloudflare Hyperdrive** | — | Connection pooling from Workers to Neon (ID: `387df7aa`) |
+| **aws4fetch** | 1.0.20 | AWS Signature V4 for R2 presigned PUT URL generation |
+
+**Entry point:** `worker/src/worker.ts` — Hono app with all routes mounted under `/api/*`.
+
+**Routes:**
+```
+GET  /health                          — public health check
+GET  /api/me                          — current user profile
+GET  /api/rooms                       — all rooms with active overlays
+PATCH /api/rooms/:id                  — update room mode
+GET/POST /api/rooms/:id/overlays      — overlay CRUD
+PATCH/DELETE /api/rooms/:id/overlays/:oid
+GET/POST /api/spray-logs              — F-005 pesticide logs
+GET/POST /api/net-logs                — net operation logs
+GET/POST /api/pot-check-logs          — pot health checks
+GET/POST /api/filter-change-logs      — filter replacement records
+POST /api/photos/presign              — R2 presigned upload URL
+GET  /api/events                      — audit event log
+GET  /api/flags                       — 410 Gone (deprecated, use overlays)
+GET  /ws/rooms/:id                    — WebSocket upgrade to Durable Object
+POST /webhooks/teams                  — Bot Framework inbound (HMAC auth)
+```
+
+---
+
+### Database
+
+| Technology | Version | Role |
+|-----------|---------|------|
+| **Neon** | — | Serverless PostgreSQL — primary relational store |
+| **Drizzle ORM** | 0.41 | Schema definition, query builder, type inference |
+| **Cloudflare Hyperdrive** | — | Connection pool between Workers and Neon |
+
+**Schema file:** `worker/src/schema.ts`
+
+**Tables:** `rooms`, `overlays`, `spray_logs`, `net_logs`, `pot_check_logs`, `filter_change_logs`, `event_logs`
+
+**Schema management:** `drizzle-kit push` (push directly to Neon — no migration files in dev).
+
+---
 
 ### Storage
 
-- **Cloudflare R2:** S3-compatible object storage for photo attachments. Pre-signed PUT URLs for direct client upload. Zero egress fees within Cloudflare network.
+| Technology | Role |
+|-----------|------|
+| **Cloudflare R2** | S3-compatible binary storage for photo attachments |
+| **aws4fetch** | Signs presigned PUT requests from the Worker |
+| **Direct client upload** | Client PUTs directly to R2 via presigned URL — Worker never proxies file bytes |
 
-### Integration
+---
 
-- **Microsoft Teams (Bot Framework / Incoming Webhooks):** Adaptive Card alerts and inbound bot queries. Shares Azure AD app registration with Graph API.
-- **Microsoft Graph API:** OAuth 2.0 calls to `/me/events` for calendar read/write.
+### Real-time
 
-### DevOps
+| Technology | Role |
+|-----------|------|
+| **Cloudflare Durable Objects** | One DO per `roomId` — holds active WebSocket connections |
+| **WebSocket** | Client connects to `/ws/rooms/:id`, DO broadcasts `ROOM_UPDATED` messages |
+| **Zustand WS listener** | `connectRoomWs(roomId)` — updates room state on `ROOM_UPDATED` events, reconnects after 3s on close |
 
-- **Wrangler CLI:** Cloudflare Workers and Durable Objects deployment.
-- **GitHub Actions:** CI/CD pipeline — lint, test, deploy on push to `main`.
-- **Jest + React Testing Library:** Unit and component tests.
-- **Playwright:** End-to-end tests across desktop and mobile viewports.
+---
+
+### Integrations
+
+| Technology | Role |
+|-----------|------|
+| **Microsoft Teams — Incoming Webhooks** | Outbound alerts (Adaptive Cards) for IPM, spray, critical pot checks |
+| **Microsoft Bot Framework** | Inbound bot queries — HMAC-authenticated webhook at `/webhooks/teams` |
+| **Microsoft Graph API** | Outlook calendar read/write (`/me/events`) for site tasks |
+| **Azure AD** | OAuth identity provider, shared app registration for Teams + Graph |
+
+---
+
+### DevOps & Tooling
+
+| Technology | Role |
+|-----------|------|
+| **Wrangler CLI** | Deploy Workers, Durable Objects, Pages; manage secrets |
+| **Cloudflare Pages** | Static hosting + SPA redirect (`_redirects`) |
+| **GitHub Actions** | CI/CD pipeline — lint → build → deploy on push to `main` |
+| **ESLint** | Client-side linting |
+| **TypeScript strict** | Worker — `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch` |
+
+---
+
+### Environment Variables
+
+**Worker secrets** (set via `wrangler secret put`):
+```
+DATABASE_URL                  Neon PostgreSQL connection string
+STACK_AUTH_JWKS_URL           https://api.stack-auth.com/api/v1/projects/<id>/.well-known/jwks.json
+STACK_AUTH_PROJECT_ID         Stack Auth project ID
+R2_ACCOUNT_ID                 Cloudflare account ID
+R2_ACCESS_KEY_ID              R2 access key
+R2_SECRET_ACCESS_KEY          R2 secret key
+R2_BUCKET_NAME                e.g. mtl-photos
+R2_PUBLIC_BASE_URL            CDN base URL for photo delivery
+TEAMS_WEBHOOK_URL             Incoming webhook URL for Teams channel
+BOT_FRAMEWORK_APP_ID          Azure AD app ID for bot
+BOT_FRAMEWORK_APP_SECRET      Azure AD app secret for bot
+AZURE_AD_CLIENT_ID            Azure AD client ID (Graph API)
+AZURE_AD_CLIENT_SECRET        Azure AD client secret (Graph API)
+AZURE_AD_TENANT_ID            Azure AD tenant ID
+```
+
+**Client env** (`.env.local`, prefix `VITE_` for Vite exposure):
+```
+VITE_API_BASE_URL             https://mtl-missioncontrol-api.austinoneill55.workers.dev
+VITE_STACK_PROJECT_ID         Stack Auth project ID (public)
+VITE_R2_PUBLIC_BASE_URL       CDN base URL for photo thumbnails
+```
 
 ---
 
@@ -238,8 +357,8 @@ Postcondition: Full functionality available on touch screens without drag gestur
 ### IsometricMap
 
 - Renders all room tiles in the correct isometric grid layout.
-- Each tile receives `id`, `name`, `position (col, row)`, `mode`, `flags[]`, and `reEntryExpiresAt` from state.
-- Renders a `RoomModeBadge` and optional `ReEntryBadge` overlay on each tile.
+- Each tile receives `id`, `name`, `position (col, row)`, `mode`, `overlays[]`, and `reEntryExpiresAt` from state.
+- Renders a `RoomModeBadge`, optional `ReEntryBadge`, and any active `OverlayBadge` components on each tile.
 - Each tile is a drop target (interact.js desktop) and tap target (mobile).
 - Listens for WebSocket messages from the room's Durable Object to update state in real time.
 
@@ -267,27 +386,61 @@ Postcondition: Full functionality available on touch screens without drag gestur
 
 ### Toolbox / LegendPanel
 
-- Lists all flag types as draggable items (desktop) or tappable cards (mobile).
-- Legend maps flag icon → meaning and mode badge → meaning.
+- Lists all overlay types as draggable items (desktop) or tappable cards (mobile).
+- Legend maps overlay icon → meaning and mode badge → meaning.
 - On mobile, renders as a bottom drawer toggled by a floating action button.
 
-### Flag
+### Overlay System
 
-- Draggable on desktop with icon, label, and optional priority badge.
-- On mobile: tappable card. Tapping sets `selectedFlagId`; tapping room assigns; tapping again deselects.
-- Emits `onFlagAssign(flagId, targetRoomId)` — shared between drag-drop and tap-to-assign paths.
+Each overlay placed on a room tile is a full **Overlay Object** — not just an icon. The overlay type determines which modal opens, what options are stored, and what badge renders on the tile.
+
+```ts
+interface Overlay {
+  id: string
+  roomId: string
+  overlayType: OverlayType
+  options: Record<string, unknown>  // type-specific payload
+  status: 'active' | 'completed' | 'pending_review'
+  placedBy: string        // Stack Auth user ID
+  placedAt: Date
+  updatedBy?: string
+  updatedAt?: Date
+  notificationSent: boolean
+}
+```
+
+**Overlay Types:**
+
+| Type | Icon | Modal | Recurring? |
+|---|---|---|---|
+| IPM / Spray | Bug icon | SprayLog form (F-005) | No |
+| Net | Net icon | NetModal | No — 1st/2nd net milestone |
+| Pot Check | Pot icon | PotCheckModal | Daily |
+| Filter Change | Filter icon | FilterChangeModal | Twice weekly |
+| Defoliation | Leaf icon | Simple log: operator, date, notes | No |
+| Transfer | Arrow icon | TransferModal | No |
+| Harvest Ready | Calendar icon | Triggers Outlook export, links to harvest date | No |
+| Mode Change | Badge icon | Dropdown mode selector | No |
+| Supply Ready | Box icon | Simple confirmation + notes | No |
+| Issue / Alert | Warning icon | Free-text description, severity, photo | No |
+
+**Overlay Interaction Rules:**
+- **Tap/click placed overlay** → opens the overlay's modal in edit mode (all fields pre-populated)
+- **Long-press (mobile) / right-click (desktop)** → context menu: Edit | Mark Complete | Remove
+- **Remove** → confirmation dialog: "Remove [Type] from [Room]? This will be logged." → creates an `EventLog` entry with action `OVERLAY_REMOVED`
+- **Mark Complete** → changes status to `completed`; overlay icon dims on tile but remains visible in history
 
 ### RoomDrawer
 
 - Slide-in detail panel for a selected room.
-- Displays: room name, current mode (editable dropdown for `master_grower`+), active flags, `SprayLogList`, `CalibrationLogList`, recent event log with photo thumbnails.
+- Displays: room name, current mode (editable dropdown for `master_grower`+), active overlays, `SprayLogList`, `CalibrationLogList`, `NetLogList`, `PotCheckLogList`, `FilterChangeLogList`, recent event log with photo thumbnails.
 - Action buttons: Log Event, Log Spray, Log Calibration, View Timeline.
 
 ### SprayLogList
 
 - Sub-component of RoomDrawer.
 - Renders all spray log entries for the room sorted by `appliedAt` descending.
-- Each entry shows: product, rate, operator, date, re-entry expiry, photo thumbnail (if present).
+- Each entry shows: pesticide, batches, operator, supervisor sign-off, date/times, re-entry expiry, photo thumbnail.
 
 ### CalibrationLogList
 
@@ -297,9 +450,89 @@ Postcondition: Full functionality available on touch screens without drag gestur
 
 ### SprayLogModal
 
-- Opens when IPM flag is assigned or "Log Spray" is tapped in RoomDrawer.
-- Fields: product name, application rate, method, operator (auto-filled from Stack Auth session), date/time, re-entry interval (hours), optional notes, optional photo attachment.
-- On submit: `POST /spray-logs`; sets `reEntryExpiresAt` on the room; triggers Teams alert.
+Matches MTL Cannabis Form **F-005 (Pesticides, Rev. 05, CC-2023-007)** exactly.
+
+| Field | Type | Notes |
+|---|---|---|
+| Room | Auto-filled | From the room the IPM overlay was placed on |
+| Batch(es) | Text input | e.g. "3UC260112PE" — supports multi-batch entry |
+| Pesticide | Text input | Product name + registration number e.g. "Sulfur 873" |
+| Date | Date picker | Application date |
+| Start Time | Time picker | 24h format e.g. "08h30" |
+| End Time | Time picker | 24h format e.g. "10h30" |
+| Reason | Checkbox group | "Preventative" / "Treatment" (both selectable) |
+| Method | Checkbox group | "Foliar Spray" / "Dip" |
+| Equipment Number | Text input | e.g. "Pest-01", "Pest-02" |
+| Equipment Name | Text input | e.g. "MSO Sprayer", "Chapin 20000" |
+| Ratio | Text input | e.g. "22g/15L", "2.5ml/L" |
+| Quantity | Text input | e.g. "30L", "8L" |
+| Performed By | Auto-filled | Stack Auth session (operator name/initials) |
+| SUPV / APPV | User selector | **Role-gated: only `master_grower` or `director` can populate** |
+| Notes | Textarea | Optional |
+| Photo | File/camera | Optional — uploads to R2 |
+
+**Re-Entry Interval:** Calculated automatically from a pesticide lookup table; displayed on the tile as a countdown. An override field is available if the product is not in the table.
+
+On submit: `POST /spray-logs`; `reEntryExpiresAt` calculated server-side; Durable Object broadcasts updated countdown to all clients; Teams alert fires.
+
+### NetModal
+
+Opens when a Net overlay is placed or tapped on a room. Features an interactive SVG graphic of the room from above with the net in the lowered position.
+
+| Field | Type | Notes |
+|---|---|---|
+| Net Number | Radio | "1st Net" / "2nd Net" |
+| Net Action | Radio | "Spread" / "Bend" |
+| Net Status | Radio | "Lowering" / "Lowered & Checked" |
+| Zip Tie Check — Row A | Checkbox row | Per-anchor checkboxes |
+| Zip Tie Check — Row B | Checkbox row | Per-anchor checkboxes |
+| Zip Tie Check — Row C | Checkbox row | Per-anchor checkboxes |
+| Zip Tie Check — Row D | Checkbox row | Per-anchor checkboxes |
+| All Zip Ties Confirmed | Auto-computed | True only if all anchors checked |
+| Operator | Auto-filled | Stack Auth session |
+| Date | Auto-filled | Current date/time |
+| Notes | Textarea | Optional |
+| Photo | File/camera | Optional |
+
+**SVG Zip Tie Graphic:** Anchor points are interactive circles. Tapping an anchor toggles its checkbox — visual and form stay in sync. Anchors are red when unchecked, green when checked. The Save button is disabled until all anchors are marked.
+
+**Net Overlay on Room Tile:** Displays "N1" or "N2" badge. Spread = blue badge, Bend = purple badge. Once all zip ties confirmed, badge gets a green checkmark.
+
+### PotCheckModal
+
+Daily recurring task. Opened from the room tile's "POT" badge or the room drawer.
+
+| Field | Type | Notes |
+|---|---|---|
+| Room | Auto-filled | |
+| Check Date | Auto-filled | Today |
+| Standing Water Present | Radio | Yes / No |
+| Water Removed | Conditional checkbox | Visible only if "Yes" |
+| Root Health | Radio | "Healthy" / "Concern" / "Critical" |
+| Notes | Textarea | Required if Root Health is Concern or Critical |
+| Photo | File/camera | Required if Root Health is Critical |
+| Performed By | Auto-filled | Stack Auth session |
+
+**Scheduling:** Internal calendar auto-generates a Pot Check task for every active grow room every day. If not logged by configurable cutoff (e.g. 14h00), room tile shows yellow "POT" badge; after cutoff it turns red and a Teams alert fires to the Master Grower.
+
+### FilterChangeModal
+
+Twice-weekly recurring task. Opened from the room tile's "FLT" badge or the room drawer.
+
+| Field | Type | Notes |
+|---|---|---|
+| Room | Auto-filled | |
+| Change Date | Auto-filled | Today |
+| Filter Type | Select | "Carbon Filter" / "Pre-Filter" / "HEPA" / "Other" |
+| Filter Size | Text input | e.g. "4 inch", "6 inch" |
+| Old Filter Condition | Radio | "Normal" / "Heavily Loaded" / "Damaged" |
+| New Filter Installed | Checkbox | Must be checked to save |
+| Equipment Number | Text input | Optional |
+| Performed By | Auto-filled | |
+| Notes | Textarea | Optional |
+| Photo | File/camera | Optional |
+
+**Scheduling:** Internal calendar auto-generates Filter Change tasks twice per week per room (configurable days, e.g. Mon/Thu). Room tile shows an "FLT" badge (orange) when due; clears once logged.
 
 ### CalibrationLogModal
 
@@ -311,8 +544,9 @@ Postcondition: Full functionality available on touch screens without drag gestur
 
 - `sendTeamsAlert(roomName, eventType, channelWebhookUrl)` — posts Adaptive Card; retries with exponential backoff × 3 on failure.
 - `listenTeamsBotMessage(req)` — parses Bot Framework activity, handles "Status [Room]" commands.
-- `createOutlookEvent(roomName, date, title)` — Graph API call with Bearer token.
-- `getOutlookEvents(dateRange)` — fetches scheduled events.
+- `createOutlookEvent(roomName, date, title)` — Graph API call with Bearer token; used only for milestone events exported from the Site Calendar.
+- `updateOutlookEvent(eventId, updates)` — Graph API PATCH for rescheduled milestones.
+- `deleteOutlookEvent(eventId)` — Graph API DELETE for cancelled milestones.
 - `presignR2Upload(roomId, logType)` — generates pre-signed R2 PUT URL.
 
 ### RoomDurableObject (Cloudflare Durable Object)
@@ -325,11 +559,12 @@ Postcondition: Full functionality available on touch screens without drag gestur
 
 ### StateStore (Zustand)
 
-- `rooms`: map of `roomId → { name, mode, flags: RoomFlag[], reEntryExpiresAt, lastUpdated }`
-- `flagDefinitions`: list of flag types (type, icon, color, notificationEnabled)
-- `selectedFlagId`: flag currently selected on mobile (null otherwise)
+- `rooms`: map of `roomId → { name, mode, overlays: Overlay[], reEntryExpiresAt, lastUpdated }`
+- `overlayDefinitions`: list of overlay types (type, icon, color, notificationEnabled)
+- `selectedOverlayType`: overlay type currently selected on mobile (null otherwise)
 - `integrations`: Teams webhook URL, Graph API token, notification preferences
 - `wsConnections`: map of `roomId → WebSocket` for Durable Object connections
+- `siteTasks`: map of `taskId → SiteTask` for calendar task state
 
 ---
 
@@ -353,7 +588,7 @@ Postcondition: Full functionality available on touch screens without drag gestur
       |            | persist             | notify
       v            v                     v
 [Neon PostgreSQL] [Durable Object]  [Teams Webhook]
-   (via Prisma)       |             [Graph API → Outlook]
+  (via Drizzle)       |             [Graph API → Outlook]
                       |
                       | WebSocket broadcast
                       v
@@ -476,14 +711,19 @@ MTL Cannabis operates under Health Canada's Cannabis Regulations, requiring trac
 | Resource | Create | Read | Update | Delete |
 |---|---|---|---|---|
 | Room | Admin configures in setup | `GET /rooms` | `PATCH /rooms/:id` | Admin only |
-| RoomFlag | `POST /rooms/:id/flags` | Included in `GET /rooms` | N/A | `DELETE /rooms/:id/flags/:flagId` |
-| Flag Definition | `POST /flags` | `GET /flags` | `PUT /flags/:id` | `DELETE /flags/:id` |
+| Overlay | `POST /rooms/:id/overlays` | Included in `GET /rooms` | `PATCH /rooms/:id/overlays/:overlayId` | `DELETE /rooms/:id/overlays/:overlayId` |
+| Overlay Definition | `POST /overlay-types` | `GET /overlay-types` | `PUT /overlay-types/:id` | `DELETE /overlay-types/:id` |
 | Spray Log | `POST /spray-logs` | `GET /spray-logs?roomId=` | (immutable) | Admin purge only |
+| Net Log | `POST /net-logs` | `GET /net-logs?roomId=` | (immutable) | Admin purge only |
+| Pot Check Log | `POST /pot-check-logs` | `GET /pot-check-logs?roomId=` | (immutable) | Admin purge only |
+| Filter Change Log | `POST /filter-change-logs` | `GET /filter-change-logs?roomId=` | (immutable) | Admin purge only |
 | Calibration Log | `POST /calibration-logs` | `GET /calibration-logs?roomId=` | (immutable) | Admin purge only |
 | Event Log | Auto on every state change | `GET /events?roomId=&from=&to=` | (immutable) | Admin purge only |
 | Photo | Upload to R2 via pre-signed URL (`POST /photos/presign`) | R2 URL stored with log entry | N/A | Admin purge only |
-| Outlook Event | `POST` via Graph API on harvest | `GET` Graph `/me/events` | `PATCH` Graph `/me/events/:id` | `DELETE` Graph `/me/events/:id` |
-| Teams Message | Triggered by flag/spray event | Bot Framework webhook inbound | N/A | N/A |
+| Site Task | `POST /tasks` (admin) or auto from RecurringTask engine | `GET /tasks?roomId=&from=&to=` | `PATCH /tasks/:id` | Admin only |
+| Recurring Task | `POST /recurring-tasks` | `GET /recurring-tasks` | `PATCH /recurring-tasks/:id` | Admin only |
+| Outlook Event | `POST` via Graph API from site calendar (milestone export only) | `GET` Graph `/me/events` | `PATCH` Graph `/me/events/:id` | `DELETE` Graph `/me/events/:id` |
+| Teams Message | Triggered by overlay/spray/overdue task | Bot Framework webhook inbound | N/A | N/A |
 
 ---
 
@@ -491,7 +731,7 @@ MTL Cannabis operates under Health Canada's Cannabis Regulations, requiring trac
 
 ### Storage Methods
 
-- **Neon (serverless PostgreSQL via Prisma):** Primary relational store. Supports DB branching for staging and test environments.
+- **Neon (serverless PostgreSQL via Drizzle ORM):** Primary relational store. Supports DB branching for staging and test environments.
 - **Cloudflare R2:** Binary photo storage. Images uploaded via pre-signed URLs, optionally compressed by a Cloudflare Worker on ingest.
 - **Cloudflare Durable Objects:** Ephemeral real-time state per room (WebSocket connections + latest room snapshot). Not a persistence layer — state is hydrated from Neon on DO startup.
 - **Stack Auth:** Manages user accounts, sessions, and role assignments externally.
@@ -529,64 +769,176 @@ AZURE_AD_TENANT_ID
 VITE_API_BASE_URL               # public — base URL of the Hono Worker API
 ```
 
-### Prisma Schema
+### Drizzle Schema
+
+Schema is defined in `worker/src/schema.ts` and managed via `drizzle-kit push` (no migration files — push directly to Neon). See that file for the canonical table definitions. Key tables:
+
+```
+rooms              — id, name, col, row, mode, reEntryExpiresAt, updatedAt
+overlays           — id, roomId, overlayType, options (json), status, placedBy, placedAt, ...
+sprayLogs          — F-005 pesticide fields: batchIds, pesticide, appliedAt, startTime, endTime,
+                     reasonPreventative, reasonTreatment, methodFoliarSpray, methodDip,
+                     equipmentNumber, equipmentName, ratio, quantity, operatorId, supervisorName,
+                     reEntryHours, reEntryExpiresAt, photoUrl, notes
+netLogs            — roomId, netNumber (1|2), action, status, zipTieChecks (json),
+                     allZipTiesConfirmed, operatorId, photoUrl, notes
+potCheckLogs       — roomId, standingWaterFound, waterRemoved, rootHealth, operatorId, photoUrl, notes
+filterChangeLogs   — roomId, filterType, filterSize, oldCondition, newInstalled,
+                     equipmentNumber, operatorId, photoUrl, notes
+calibrationLogs    — roomId, equipmentType, preReading, standard, postReading, passFail,
+                     operatorId, calibratedAt, photoUrl, notes
+eventLogs          — roomId, operatorId, action, previousValue, newValue, source, createdAt
+```
+
+Legacy Prisma schema snapshot (pre-migration, kept for reference only):
 
 ```prisma
 model Room {
-  id               String           @id @default(uuid())
+  id               String            @id @default(uuid())
   name             String
   col              Int
   row              Int
-  mode             String           @default("idle") // "veg"|"flower"|"flush"|"dry"|"idle"|"maintenance"
+  mode             String            @default("idle") // "veg"|"flower"|"flush"|"dry"|"idle"|"maintenance"
   reEntryExpiresAt DateTime?
-  flags            RoomFlag[]
+  overlays         Overlay[]
   events           EventLog[]
   sprayLogs        SprayLog[]
+  netLogs          NetLog[]
+  potCheckLogs     PotCheckLog[]
+  filterChangeLogs FilterChangeLog[]
   calibrationLogs  CalibrationLog[]
-  updatedAt        DateTime         @updatedAt
+  siteTasks        SiteTask[]
+  recurringTasks   RecurringTask[]
+  updatedAt        DateTime          @updatedAt
 }
 
-model Flag {
-  id                  String     @id @default(uuid())
-  type                String
-  iconUrl             String
-  color               String
-  notificationEnabled Boolean    @default(false)
-  calendarEnabled     Boolean    @default(false)
-  rooms               RoomFlag[]
-}
-
-model RoomFlag {
-  id         String   @id @default(uuid())
-  room       Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
-  roomId     String
-  flag       Flag     @relation(fields: [flagId], references: [id])
-  flagId     String
-  assignedBy String   // Stack Auth user ID
-  assignedAt DateTime @default(now())
+model Overlay {
+  id               String   @id @default(uuid())
+  room             Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  roomId           String
+  overlayType      String   // "ipm"|"net"|"pot_check"|"filter_change"|"defoliation"|"transfer"|"harvest_ready"|"mode_change"|"supply_ready"|"issue"
+  options          Json     // type-specific payload
+  status           String   @default("active") // "active"|"completed"|"pending_review"
+  placedBy         String   // Stack Auth user ID
+  placedAt         DateTime @default(now())
+  updatedBy        String?
+  updatedAt        DateTime @updatedAt
+  notificationSent Boolean  @default(false)
 
   @@index([roomId])
-  @@index([flagId])
+  @@index([overlayType])
 }
 
 model SprayLog {
-  id               String   @id @default(uuid())
-  room             Room     @relation(fields: [roomId], references: [id])
-  roomId           String
-  product          String
-  rate             String
-  method           String?
-  pcpRegNumber     String?  // Health Canada PCP registration number
-  operatorId       String   // Stack Auth user ID
-  appliedAt        DateTime
-  reEntryHours     Float
-  reEntryExpiresAt DateTime
-  photoUrl         String?  // Cloudflare R2 URL
-  notes            String?
-  createdAt        DateTime @default(now())
+  id                 String    @id @default(uuid())
+  room               Room      @relation(fields: [roomId], references: [id])
+  roomId             String
+  batchIds           String    // comma-separated batch IDs e.g. "3UC260112PE, GP2260112PE"
+  pesticide          String    // product name + registration number
+  appliedAt          DateTime  // application date
+  startTime          String    // "08h30"
+  endTime            String    // "10h30"
+  reasonPreventative Boolean   @default(false)
+  reasonTreatment    Boolean   @default(false)
+  methodFoliarSpray  Boolean   @default(false)
+  methodDip          Boolean   @default(false)
+  equipmentNumber    String
+  equipmentName      String
+  ratio              String    // "22g/15L"
+  quantity           String    // "30L"
+  operatorId         String    // Stack Auth user ID (Performed By)
+  supervisorName     String    // SUPV/APPV — populated only by master_grower|director
+  reEntryHours       Float     @default(0)
+  reEntryExpiresAt   DateTime?
+  photoUrl           String?
+  notes              String?
+  createdAt          DateTime  @default(now())
 
   @@index([roomId])
   @@index([appliedAt])
+}
+
+model NetLog {
+  id                  String   @id @default(uuid())
+  room                Room     @relation(fields: [roomId], references: [id])
+  roomId              String
+  netNumber           Int      // 1 or 2
+  action              String   // "spread" | "bend"
+  status              String   // "lowering" | "lowered_checked"
+  zipTieChecks        Json     // { rowA: bool[], rowB: bool[], rowC: bool[], rowD: bool[] }
+  allZipTiesConfirmed Boolean  @default(false)
+  operatorId          String
+  loggedAt            DateTime @default(now())
+  photoUrl            String?
+  notes               String?
+
+  @@index([roomId])
+}
+
+model PotCheckLog {
+  id                 String   @id @default(uuid())
+  room               Room     @relation(fields: [roomId], references: [id])
+  roomId             String
+  checkedAt          DateTime @default(now())
+  standingWaterFound Boolean
+  waterRemoved       Boolean?
+  rootHealth         String   // "healthy" | "concern" | "critical"
+  operatorId         String
+  photoUrl           String?
+  notes              String?
+
+  @@index([roomId])
+  @@index([checkedAt])
+}
+
+model FilterChangeLog {
+  id              String   @id @default(uuid())
+  room            Room     @relation(fields: [roomId], references: [id])
+  roomId          String
+  changedAt       DateTime @default(now())
+  filterType      String   // "carbon" | "pre" | "hepa" | "other"
+  filterSize      String?
+  oldCondition    String   // "normal" | "heavily_loaded" | "damaged"
+  newInstalled    Boolean
+  equipmentNumber String?
+  operatorId      String
+  photoUrl        String?
+  notes           String?
+
+  @@index([roomId])
+  @@index([changedAt])
+}
+
+model RecurringTask {
+  id            String   @id @default(uuid())
+  roomId        String?  // null = facility-wide task
+  taskType      String   // "pot_check" | "filter_change"
+  frequency     String   // "daily" | "twice_weekly"
+  scheduledDays Json?    // ["monday", "thursday"] for twice_weekly
+  cutoffTime    String?  // "14:00" — time after which overdue alert fires
+  active        Boolean  @default(true)
+}
+
+model SiteTask {
+  id              String    @id @default(uuid())
+  title           String
+  roomId          String?
+  room            Room?     @relation(fields: [roomId], references: [id])
+  taskType        String    // "pot_check" | "filter_change" | "harvest" | "custom" | ...
+  assignedRole    String?
+  assignedUserId  String?
+  scheduledFor    DateTime
+  dueBy           DateTime?
+  status          String    @default("pending") // "pending" | "in_progress" | "completed" | "overdue"
+  completedBy     String?
+  completedAt     DateTime?
+  linkedLogId     String?   // references SprayLog, PotCheckLog, etc.
+  exportToOutlook Boolean   @default(false)
+  outlookEventId  String?   // Graph API event ID for sync
+  notes           String?
+  createdBy       String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }
 
 model CalibrationLog {
@@ -613,7 +965,7 @@ model EventLog {
   room          Room     @relation(fields: [roomId], references: [id])
   roomId        String
   operatorId    String   // Stack Auth user ID
-  action        String   // "FLAG_ASSIGN"|"FLAG_REMOVE"|"MODE_CHANGE"|"SPRAY_LOG"|"CALIBRATION_LOG"|"FAILED_NOTIFICATION"
+  action        String   // "OVERLAY_PLACED"|"OVERLAY_REMOVED"|"OVERLAY_EDITED"|"OVERLAY_COMPLETED"|"MODE_CHANGE"|"SPRAY_LOG"|"NET_LOG"|"POT_CHECK"|"FILTER_CHANGE"|"CALIBRATION_LOG"|"FAILED_NOTIFICATION"
   previousValue String?
   newValue      String?
   source        String   // "UI"|"TEAMS"
@@ -666,17 +1018,114 @@ DELETE /rooms/:id/flags/:flagId
   Response: 204 | 401 | 403 | 404
 ```
 
+### Overlays
+
+```
+POST /rooms/:id/overlays
+  Auth: gardener | pest_control | master_grower | director
+  Body: { overlayType, options, status? }
+  Response: 201 { overlay } | 400 | 401 | 403
+
+PATCH /rooms/:id/overlays/:overlayId
+  Auth: gardener | pest_control | master_grower | director
+  Body: { options?, status? }
+  Response: 200 { overlay } | 400 | 401 | 403 | 404
+
+DELETE /rooms/:id/overlays/:overlayId
+  Auth: gardener | pest_control | master_grower | director
+  Response: 204 | 401 | 403 | 404
+  Side effect: creates EventLog with action "OVERLAY_REMOVED"
+```
+
 ### Spray Logs
 
 ```
 POST /spray-logs
   Auth: gardener | pest_control | master_grower | director
-  Body: { roomId, product, rate, method?, pcpRegNumber?, appliedAt, reEntryHours, photoUrl?, notes? }
+  Body: { roomId, batchIds, pesticide, appliedAt, startTime, endTime,
+          reasonPreventative, reasonTreatment, methodFoliarSpray, methodDip,
+          equipmentNumber, equipmentName, ratio, quantity,
+          supervisorName (master_grower|director only), reEntryHours?, reEntryOverride?,
+          photoUrl?, notes? }
   Response: 201 { sprayLog } | 400 | 401 | 403
+  Note: supervisorName field is validated server-side; returns 403 if a non-supervisor role attempts to set it.
 
 GET  /spray-logs?roomId=&from=&to=
   Auth: any authenticated role
   Response: 200 [SprayLog]
+```
+
+### Net Logs
+
+```
+POST /net-logs
+  Auth: gardener | master_grower | director
+  Body: { roomId, netNumber, action, status, zipTieChecks, allZipTiesConfirmed, photoUrl?, notes? }
+  Response: 201 { netLog } | 400 | 401 | 403
+
+GET  /net-logs?roomId=
+  Auth: any authenticated role
+  Response: 200 [NetLog]
+```
+
+### Pot Check Logs
+
+```
+POST /pot-check-logs
+  Auth: gardener | master_grower | director
+  Body: { roomId, standingWaterFound, waterRemoved?, rootHealth, photoUrl?, notes? }
+  Response: 201 { potCheckLog } | 400 | 401 | 403
+
+GET  /pot-check-logs?roomId=&from=&to=
+  Auth: any authenticated role
+  Response: 200 [PotCheckLog]
+```
+
+### Filter Change Logs
+
+```
+POST /filter-change-logs
+  Auth: gardener | master_grower | director
+  Body: { roomId, filterType, filterSize?, oldCondition, newInstalled, equipmentNumber?, photoUrl?, notes? }
+  Response: 201 { filterChangeLog } | 400 | 401 | 403
+
+GET  /filter-change-logs?roomId=&from=&to=
+  Auth: any authenticated role
+  Response: 200 [FilterChangeLog]
+```
+
+### Site Tasks
+
+```
+GET  /tasks?roomId=&from=&to=&status=
+  Auth: any authenticated role
+  Response: 200 [SiteTask]
+
+POST /tasks
+  Auth: master_grower | director
+  Body: { title, roomId?, taskType, assignedRole?, assignedUserId?, scheduledFor, dueBy?, exportToOutlook?, notes? }
+  Response: 201 { siteTask } | 400 | 401 | 403
+
+PATCH /tasks/:id
+  Auth: any authenticated role (completion); master_grower | director (reschedule/delete)
+  Body: { status?, completedBy?, completedAt?, linkedLogId?, exportToOutlook?, scheduledFor?, notes? }
+  Response: 200 { siteTask } | 400 | 401 | 403 | 404
+  Side effect: if exportToOutlook changes or scheduledFor changes, syncs Outlook event via Graph API.
+
+### Recurring Tasks
+
+GET  /recurring-tasks
+  Auth: master_grower | director
+  Response: 200 [RecurringTask]
+
+POST /recurring-tasks
+  Auth: master_grower | director
+  Body: { roomId?, taskType, frequency, scheduledDays?, cutoffTime? }
+  Response: 201 { recurringTask }
+
+PATCH /recurring-tasks/:id
+  Auth: master_grower | director
+  Response: 200 { recurringTask }
 ```
 
 ### Calibration Logs
@@ -809,13 +1258,17 @@ On mobile, a two-step tap model replaces drag:
 
 **Error handling:** Retry Teams webhook up to 3 times with exponential backoff (1s, 2s, 4s). On final failure, log a `FAILED_NOTIFICATION` `EventLog` record and surface a toast notification in the UI.
 
-### Outlook Calendar (Microsoft Graph API)
+### Outlook Calendar (Microsoft Graph API) — Export Only
+
+Outlook is now an **export target from the Site Calendar**, not the primary scheduling interface. Routine operational tasks (pot checks, filter changes) are never exported. Only milestone events with `exportToOutlook: true` are synced.
 
 1. Azure AD app registration with `Calendars.ReadWrite` delegated permission.
 2. OAuth 2.0 Authorization Code flow; refresh token stored securely in Worker environment.
-3. Create event: `POST https://graph.microsoft.com/v1.0/me/events`.
-4. List events: `GET https://graph.microsoft.com/v1.0/me/calendarview?startDateTime=&endDateTime=`
-5. **Error handling:** On Graph API 401 (token expired), Worker uses the refresh token to obtain a new access token, then retries once. On failure, logs `FAILED_NOTIFICATION` event.
+3. **Create event:** When `exportToOutlook: true` is set on a `SiteTask`, Worker calls `POST https://graph.microsoft.com/v1.0/me/events` and stores the returned `outlookEventId`.
+4. **Update event:** When the task is rescheduled, Worker calls `PATCH /me/events/:outlookEventId`.
+5. **Delete event:** When the task is deleted, Worker calls `DELETE /me/events/:outlookEventId`.
+6. **Bulk export:** Admin can bulk-export a week's schedule from the calendar view — "Export Week to Outlook."
+7. **Error handling:** On Graph API 401 (token expired), Worker uses the refresh token to obtain a new access token, then retries once. On failure, logs `FAILED_NOTIFICATION` event.
 
 ---
 
@@ -870,8 +1323,7 @@ MTL-MissionControl/
 │   │   └── worker.ts
 │   ├── wrangler.toml
 │   └── package.json
-├── prisma/               # Shared Prisma schema
-│   └── schema.prisma
+├── worker/src/schema.ts  # Drizzle ORM schema (all tables)
 ├── DOCS/
 │   └── DESIGN_SPEC.md
 └── .github/
@@ -900,6 +1352,8 @@ jobs:
 ---
 
 ## 17. Transfer Feature Specification
+
+> See Section 5 (Overlay System) for edit/remove interaction rules that also apply to Transfer overlays.
 
 ### Overview
 
@@ -990,19 +1444,49 @@ API routes: `POST /api/transfers`, `PATCH /api/transfers/:id`, `DELETE /api/tran
 
 ---
 
-## 18. Future Features (Planned)
+## 18. Site Calendar
+
+The internal site calendar is the **source of truth for daily operations**. Outlook is an export target only (see Section 15).
+
+### Features
+
+| Feature | Description |
+|---|---|
+| Admin task creation | Admin creates daily/recurring tasks directly in the site calendar |
+| Room-scoped tasks | Tasks can be pinned to a specific room or set as facility-wide |
+| Recurring task engine | Pot checks and filter changes auto-populate from `RecurringTask` schedule |
+| Task assignment | Admin assigns tasks to a role or specific operator |
+| Completion tracking | Operators mark tasks complete from the calendar or room drawer |
+| Overdue escalation | Uncompleted tasks past `dueBy` trigger Teams alert to Master Grower |
+| Export to Outlook | One-click or auto-export of harvest dates and major milestones to Outlook Calendar |
+
+### Calendar Views
+
+- **Day view** — all tasks for today across all rooms; grouped by room
+- **Week view** — 7-day grid; shows recurring tasks, special tasks, upcoming harvests
+- **Room view** — filter to a single room's task history and upcoming schedule
+
+### Role-Gated Actions
+
+- Creating and editing tasks requires `master_grower` or `director`.
+- Completing a task (marking it done, submitting the linked log) is available to any authenticated role.
+- Exporting to Outlook requires `master_grower` or `director`.
+
+---
+
+## 19. Future Features (Planned)
 
 - **Multi-facility support** — Top-level facility selector; `Facility` model added to schema with rooms scoped per facility.
 - **Role-based access control UI** — Admin panel for Director to assign roles via Stack Auth management API; read-only view for auditors.
 - **Harvest Gantt / timeline view** — Horizontal timeline across flower rooms showing stage day and expected harvest date.
 - **Dashboard / KPI panel** — Rooms by mode count, active alerts, open IPM flags, next harvest date.
-- **Notification escalation** — Unacknowledged WARN/ALERT flags escalate to Master Grower or Director after a configurable window.
-- **PDF export** — One-click daily facility status report for Health Canada inspections.
+- **Notification escalation** — Unacknowledged WARN/ALERT overlays escalate to Master Grower or Director after a configurable window.
+- **PDF export** — One-click daily facility status report for Health Canada inspections (F-005 form pre-filled from SprayLog data).
 - **Environmental sensor feed** — Pull temp/humidity/CO2/VPD per room from an existing sensor API; display as badge on tile.
 
 ---
 
-## 18. Testing Strategy
+## 20. Testing Strategy
 
 ### Unit Tests (Jest)
 
@@ -1035,14 +1519,14 @@ API routes: `POST /api/transfers`, `PATCH /api/transfers/:id`, `DELETE /api/tran
 
 ---
 
-## 19. References
+## 21. References
 
 - Stack Auth. (2024). *Stack Auth Documentation*. https://docs.stack-auth.com
 - Cloudflare. (2024). *R2 Object Storage Documentation*. https://developers.cloudflare.com/r2/
 - Cloudflare. (2024). *Durable Objects*. https://developers.cloudflare.com/durable-objects/
 - Cloudflare. (2024). *Hono on Cloudflare Workers*. https://hono.dev/docs/getting-started/cloudflare-workers
 - Neon. (2024). *Serverless PostgreSQL*. https://neon.tech/docs
-- Prisma. (2024). *Prisma ORM with Neon (serverless driver)*. https://www.prisma.io/docs/orm/overview/databases/neon
+- Drizzle ORM. (2024). *Drizzle ORM Documentation*. https://orm.drizzle.team/docs/overview
 - Microsoft. (2024). *Build bots with Microsoft Bot Framework*. https://learn.microsoft.com/en-us/azure/bot-service/
 - Microsoft. (2024). *Create Incoming Webhooks in Microsoft Teams*. https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook
 - Microsoft. (2024). *Adaptive Cards for Teams*. https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/design-effective-cards

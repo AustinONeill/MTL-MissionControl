@@ -6,18 +6,23 @@ export type Role =
   | 'director'
 
 export type RoomMode =
-  | 'veg'
-  | 'flower'
-  | 'flush'
-  | 'dry'
-  | 'idle'
-  | 'maintenance'
+  | 'off'
+  | 'auto'
+  | 'crop'
+  | 'fill'
 
 export type EventAction =
   | 'FLAG_ASSIGN'
   | 'FLAG_REMOVE'
+  | 'OVERLAY_PLACED'
+  | 'OVERLAY_EDITED'
+  | 'OVERLAY_COMPLETED'
+  | 'OVERLAY_REMOVED'
   | 'MODE_CHANGE'
   | 'SPRAY_LOG'
+  | 'NET_LOG'
+  | 'POT_CHECK'
+  | 'FILTER_CHANGE'
   | 'CALIBRATION_LOG'
   | 'FAILED_NOTIFICATION'
 

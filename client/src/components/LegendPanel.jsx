@@ -8,13 +8,14 @@ const STATUS_ITEMS = [
 ]
 
 export const SYMBOL_ITEMS = [
-  { key: 'ipm',          glyph: '🐛', label: 'IPM Active' },
-  { key: 'defoliation',  glyph: '✂',  label: 'Defoliation' },
-  { key: 'transfer',     glyph: '⇄',  label: 'Transfer' },
-  { key: 'mode_change',  glyph: '⚙',  label: 'Mode Change' },
-  { key: 'supply_ready', glyph: '◈',  label: 'Supply Ready' },
-  { key: 'calendar',     glyph: '◷',  label: 'Calendar Event' },
-  { key: 'issue',        glyph: '⚠',  label: 'Open Issue' },
+  { key: 'ipm',           glyph: '🐛', label: 'IPM Active' },
+  { key: 'net',           glyph: '🕸', label: 'Net' },
+  { key: 'defoliation',   glyph: '✂',  label: 'Defoliation' },
+  { key: 'transfer',      glyph: '⇄',  label: 'Transfer' },
+  { key: 'harvest_ready', glyph: '◷',  label: 'Harvest Ready' },
+  { key: 'mode_change',   glyph: '⚙',  label: 'Mode Change' },
+  { key: 'supply_ready',  glyph: '◈',  label: 'Supply Ready' },
+  { key: 'issue',         glyph: '⚠',  label: 'Open Issue' },
 ]
 
 export default function LegendPanel() {

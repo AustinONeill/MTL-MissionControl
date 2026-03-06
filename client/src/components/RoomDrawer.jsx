@@ -2,10 +2,38 @@ import { useState } from 'react'
 import { useFacilityStore, STATUS, MODES } from '../store/facilityStore'
 import DefoliationModal from './DefoliationModal'
 import SprayLogModal from './SprayLogModal'
-import CalibrationLogModal from './CalibrationLogModal'
 import SprayLogList from './SprayLogList'
-import CalibrationLogList from './CalibrationLogList'
 import TransferModal from './TransferModal'
+import NetModal from './NetModal'
+import PreVegZoneMap from './PreVegZoneMap'
+
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
+
+async function apiFetch(path, options = {}) {
+  const token = localStorage.getItem('stack-auth-token')
+  const res = await fetch(`${API_BASE}${path}`, {
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(options.headers ?? {}),
+    },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(err.error ?? `HTTP ${res.status}`)
+  }
+  return res.json()
+}
+
+async function uploadPhoto(roomId, logType, file) {
+  const presign = await apiFetch('/api/photos/presign', {
+    method: 'POST',
+    body: JSON.stringify({ roomId, logType, contentType: file.type }),
+  })
+  await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+  return presign.publicUrl
+}
 
 const STATUS_LABEL = {
   [STATUS.NORMAL]: 'NORMAL',
@@ -29,30 +57,90 @@ const STATUS_COLORS = {
 }
 
 const MODE_OPTIONS = [
-  { value: MODES.VEG,         label: 'Veg' },
-  { value: MODES.FLOWER,      label: 'Flower' },
-  { value: MODES.FLUSH,       label: 'Flush' },
-  { value: MODES.DRY,         label: 'Dry' },
-  { value: MODES.IDLE,        label: 'Idle' },
-  { value: MODES.MAINTENANCE, label: 'Maintenance' },
+  { value: MODES.OFF,  label: 'Off' },
+  { value: MODES.AUTO, label: 'Auto' },
+  { value: MODES.CROP, label: 'Crop' },
+  { value: MODES.FILL, label: 'Fill' },
 ]
 
 const SYMBOL_DISPLAY = {
-  ipm:          { glyph: '🐛', label: 'IPM Active' },
-  defoliation:  { glyph: '✂',  label: 'Defoliation Logged' },
-  transfer:     { glyph: '⇄',  label: 'Transfer Pending' },
-  mode_change:  { glyph: '⚙',  label: 'Mode Changed' },
-  supply_ready: { glyph: '◈',  label: 'Supply Ready' },
-  calendar:     { glyph: '◷',  label: 'Calendar Event' },
-  issue:        { glyph: '⚠',  label: 'Open Issue' },
+  ipm:           { glyph: '🐛', label: 'IPM Active' },
+  net:           { glyph: '🕸', label: 'Net Active' },
+  pot_check:     { glyph: '🪴', label: 'Pot Check Due' },
+  filter_change: { glyph: '🌬', label: 'Filter Change Due' },
+  defoliation:   { glyph: '✂',  label: 'Defoliation Logged' },
+  transfer:      { glyph: '⇄',  label: 'Transfer Pending' },
+  harvest_ready: { glyph: '◷',  label: 'Harvest Ready' },
+  mode_change:   { glyph: '⚙',  label: 'Mode Changed' },
+  supply_ready:  { glyph: '◈',  label: 'Supply Ready' },
+  issue:         { glyph: '⚠',  label: 'Open Issue' },
 }
 
-const DRAWER_TABS = ['OVERVIEW', 'SPRAY LOGS', 'CALIBRATION']
+const DRAWER_TABS = ['OVERVIEW', 'SPRAY LOGS', 'POT CHECK', 'FILTER CHANGE']
 
+// ── Simple Yes/No log tab ──────────────────────────────────────────────────
+function YesNoTab({ label, apiPath, bodyFn }) {
+  const [submitting, setSubmitting] = useState(false)
+  const [saved, setSaved]           = useState(null) // 'yes' | 'no' | null
+  const [error, setError]           = useState(null)
+
+  const handleTap = async (completed) => {
+    setSubmitting(true); setError(null)
+    try {
+      if (API_BASE) {
+        await apiFetch(apiPath, { method: 'POST', body: JSON.stringify(bodyFn(completed)) })
+      }
+      setSaved(completed ? 'yes' : 'no')
+      setTimeout(() => setSaved(null), 3000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (saved) return (
+    <div className="drawer-section yn-confirm" style={{ color: saved === 'yes' ? '#4ade80' : '#f87171' }}>
+      {saved === 'yes' ? `✓ ${label} — Complete` : `✕ ${label} — Not Done`}
+    </div>
+  )
+
+  return (
+    <section className="drawer-section">
+      <p className="yn-prompt">{label} complete?</p>
+      {error && <p className="form-error">{error}</p>}
+      <div className="yn-btn-row">
+        <button className="yn-btn yn-btn--yes" disabled={submitting} onClick={() => handleTap(true)}>YES</button>
+        <button className="yn-btn yn-btn--no"  disabled={submitting} onClick={() => handleTap(false)}>NO</button>
+      </div>
+    </section>
+  )
+}
+
+function PotCheckTab({ roomId }) {
+  return (
+    <YesNoTab
+      label="Pot Check"
+      apiPath="/api/pot-check-logs"
+      bodyFn={(completed) => ({ roomId, completed, rootHealth: completed ? 'healthy' : 'concern' })}
+    />
+  )
+}
+
+function FilterChangeTab({ roomId }) {
+  return (
+    <YesNoTab
+      label="Filter Change"
+      apiPath="/api/filter-change-logs"
+      bodyFn={(completed) => ({ roomId, completed, newInstalled: completed })}
+    />
+  )
+}
+
+// ── Main Drawer ────────────────────────────────────────────────────────────
 export default function RoomDrawer() {
   const { selectedRoomId, drawerOpen, closeDrawer, getRoom, updateRoomStatus, updateRoomMode, transfers } = useFacilityStore()
   const room = selectedRoomId ? getRoom(selectedRoomId) : null
-  // Transfer where this room is origin or destination
   const transferAsOrigin = room ? transfers[room.id] : null
   const transferAsDest   = room
     ? Object.entries(transfers).find(([, t]) => t.destinationId === room.id)
@@ -60,13 +148,12 @@ export default function RoomDrawer() {
   const sc   = room ? STATUS_COLORS[room.status] ?? STATUS_COLORS[STATUS.NORMAL] : STATUS_COLORS[STATUS.NORMAL]
   const tc   = room ? (TYPE_COLOR[room.type] || TYPE_COLOR.utility) : TYPE_COLOR.utility
 
-  const [tab, setTab]                 = useState('OVERVIEW')
-  const [defolOpen, setDefolOpen]     = useState(false)
-  const [sprayOpen, setSprayOpen]     = useState(false)
-  const [calibOpen, setCalibOpen]     = useState(false)
+  const [tab, setTab]               = useState('OVERVIEW')
+  const [defolOpen, setDefolOpen]   = useState(false)
+  const [sprayOpen, setSprayOpen]   = useState(false)
   const [transferOpen, setTransferOpen] = useState(false)
-  const [sprayKey, setSprayKey]       = useState(0)
-  const [calibKey, setCalibKey]       = useState(0)
+  const [netOpen, setNetOpen]       = useState(false)
+  const [sprayKey, setSprayKey]     = useState(0)
 
   const hasDefoliation = room?.symbols?.includes('defoliation')
 
@@ -100,12 +187,11 @@ export default function RoomDrawer() {
                     <span className="meta-value">{room.stage}</span>
                   </span>
                 )}
-                {/* Mode selector */}
                 <span className="meta-chip meta-chip-select">
                   <span className="meta-label">MODE</span>
                   <select
                     className="mode-select"
-                    value={room.mode ?? MODES.IDLE}
+                    value={room.mode ?? MODES.OFF}
                     onChange={(e) => updateRoomMode(room.id, e.target.value)}
                   >
                     {MODE_OPTIONS.map(o => (
@@ -141,8 +227,9 @@ export default function RoomDrawer() {
                         const s = SYMBOL_DISPLAY[sym]
                         if (!s) return null
                         const isDefol = sym === 'defoliation'
+                        const isNet   = sym === 'net'
                         return (
-                          <div key={sym} className={`flag-chip ${isDefol ? 'flag-chip--editable' : ''}`}>
+                          <div key={sym} className={`flag-chip ${(isDefol || isNet) ? 'flag-chip--editable' : ''}`}>
                             <span className="flag-glyph">{s.glyph}</span>
                             <span className="flag-label">{s.label}</span>
                             {isDefol && (
@@ -155,6 +242,16 @@ export default function RoomDrawer() {
                                 ✏
                               </button>
                             )}
+                            {isNet && (
+                              <button
+                                className="flag-edit-btn"
+                                onClick={() => setNetOpen(true)}
+                                aria-label="Edit net log"
+                                title="Log net status"
+                              >
+                                ✏
+                              </button>
+                            )}
                           </div>
                         )
                       })}
@@ -162,7 +259,7 @@ export default function RoomDrawer() {
                   </section>
                 )}
 
-                {/* Transfer info card — shown when this room has an active transfer */}
+                {/* Transfer info card */}
                 {(transferAsOrigin || transferAsDest) && (
                   <section className="drawer-section">
                     <h3 className="section-title">ACTIVE TRANSFER</h3>
@@ -193,10 +290,7 @@ export default function RoomDrawer() {
                         {transferAsOrigin.notes && (
                           <p className="transfer-info-notes">{transferAsOrigin.notes}</p>
                         )}
-                        <button
-                          className="transfer-edit-btn"
-                          onClick={() => setTransferOpen(true)}
-                        >
+                        <button className="transfer-edit-btn" onClick={() => setTransferOpen(true)}>
                           ✏ Edit Transfer
                         </button>
                       </div>
@@ -215,15 +309,8 @@ export default function RoomDrawer() {
                   </section>
                 )}
 
-                {/* Action buttons */}
-                <div className="drawer-actions">
-                  <button className="action-btn primary" onClick={() => { setSprayOpen(true) }}>
-                    🧪 Log Spray
-                  </button>
-                  <button className="action-btn" onClick={() => { setCalibOpen(true) }}>
-                    🔬 Log Calibration
-                  </button>
-                </div>
+                {/* PRE-VEG zone map */}
+                {room.id === 'PREVEG' && <PreVegZoneMap />}
 
                 {/* Dev status override */}
                 <section className="drawer-section">
@@ -254,16 +341,17 @@ export default function RoomDrawer() {
               </section>
             )}
 
-            {/* ── Tab: Calibration ─────────────────────────────────── */}
-            {tab === 'CALIBRATION' && (
-              <section className="drawer-section">
-                <div className="section-header-row">
-                  <h3 className="section-title">CALIBRATION LOGS</h3>
-                  <button className="action-btn-sm" onClick={() => setCalibOpen(true)}>+ New</button>
-                </div>
-                <CalibrationLogList key={calibKey} roomId={room.id} />
-              </section>
+            {/* ── Tab: Pot Check ────────────────────────────────────── */}
+            {tab === 'POT CHECK' && (
+              <PotCheckTab key={room.id} roomId={room.id} />
             )}
+
+            {/* ── Tab: Filter Change ────────────────────────────────── */}
+            {tab === 'FILTER CHANGE' && (
+              <FilterChangeTab key={room.id} roomId={room.id} />
+            )}
+
+
           </>
         )}
       </aside>
@@ -285,18 +373,18 @@ export default function RoomDrawer() {
         />
       )}
 
-      {calibOpen && room && (
-        <CalibrationLogModal
-          roomId={room.id}
-          onClose={() => setCalibOpen(false)}
-          onSaved={() => { setCalibKey(k => k + 1); setTab('CALIBRATION') }}
-        />
-      )}
-
       {transferOpen && room && transferAsOrigin && (
         <TransferModal
           originRoomId={room.id}
           onClose={() => setTransferOpen(false)}
+        />
+      )}
+
+      {netOpen && room && (
+        <NetModal
+          roomId={room.id}
+          onClose={() => setNetOpen(false)}
+          onSaved={() => setNetOpen(false)}
         />
       )}
     </>

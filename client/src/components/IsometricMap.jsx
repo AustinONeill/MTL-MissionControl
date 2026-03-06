@@ -1,6 +1,7 @@
 import { useMemo, useState, useCallback, useEffect } from 'react'
 import { useFacilityStore, STATUS } from '../store/facilityStore'
 import { DefoliationInfoModal } from './DefoliationModal'
+import NetModal from './NetModal'
 import QuickLogModal from './QuickLogModal'
 import RoomModeBadge from './RoomModeBadge'
 import ReEntryBadge from './ReEntryBadge'
@@ -56,13 +57,16 @@ const faceColors = (type, status) => {
 
 // ─── Symbol overlay definitions ─────────────────────────────────────────────
 const SYMBOL_GLYPHS = {
-  ipm:          '🐛',
-  defoliation:  '✂',
-  transfer:     '⇄',
-  mode_change:  '⚙',
-  supply_ready: '◈',
-  calendar:     '◷',
-  issue:        '⚠',
+  ipm:           '🐛',
+  net:           '🕸',
+  pot_check:     '🪴',
+  filter_change: '🌬',
+  defoliation:   '✂',
+  transfer:      '⇄',
+  harvest_ready: '◷',
+  mode_change:   '⚙',
+  supply_ready:  '◈',
+  issue:         '⚠',
 }
 
 // ─── Accurate room layout derived from floor plan analysis ───────────────────
@@ -151,7 +155,7 @@ const LAYOUT = [
 ]
 
 // ─── Single isometric box tile ───────────────────────────────────────────────
-function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover, onDefolClick,
+function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover, onDefolClick, onNetClick,
                   isDragOver, onDragEnter, onDragLeave, onDrop, isPendingOrigin, isTransferDest }) {
   const { col, row, w, h } = room
   const s = (gx, gy) => ({ x: ox + iso(gx, gy).x, y: oy + iso(gx, gy).y })
@@ -171,8 +175,6 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
   const wallR = [TR, BR,
     { x: BR.x, y: BR.y + TD },
     { x: TR.x, y: TR.y + TD }]
-
-  const glowOpacity = isSelected ? 0.6 : isHovered ? 0.25 : 0
 
   const handleEnter = () => onHover && onHover(room.id)
   const handleLeave = () => onHover && onHover(null)
@@ -409,6 +411,8 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
         <g>
           {symbols.map((sym, i) => {
             const isScissors = sym === 'defoliation'
+            const isNet      = sym === 'net'
+            const isClickable = isScissors || isNet
             return (
               <text
                 key={sym}
@@ -418,11 +422,15 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
                 fontFamily="'Segoe UI Emoji', 'Apple Color Emoji', sans-serif"
                 opacity={0.9}
                 style={{
-                  pointerEvents: isScissors ? 'all' : 'none',
-                  cursor: isScissors ? 'pointer' : 'default',
+                  pointerEvents: isClickable ? 'all' : 'none',
+                  cursor: isClickable ? 'pointer' : 'default',
                   userSelect: 'none',
                 }}
-                onClick={isScissors ? (e) => { e.stopPropagation(); onDefolClick?.() } : undefined}
+                onClick={
+                  isScissors ? (e) => { e.stopPropagation(); onDefolClick?.() }
+                  : isNet    ? (e) => { e.stopPropagation(); onNetClick?.() }
+                  : undefined
+                }
               >
                 {SYMBOL_GLYPHS[sym] || '?'}
               </text>
@@ -440,6 +448,9 @@ export default function IsometricMap() {
   const selectRoom           = useFacilityStore(s => s.selectRoom)
   const selectedId           = useFacilityStore(s => s.selectedRoomId)
   const openDefolInfo        = useFacilityStore(s => s.openDefolInfo)
+  const openNetLog           = useFacilityStore(s => s.openNetLog)
+  const closeNetLog          = useFacilityStore(s => s.closeNetLog)
+  const netLogRoomId         = useFacilityStore(s => s.netLogRoomId)
   const loadRooms            = useFacilityStore(s => s.loadRooms)
   const connectRoomWs        = useFacilityStore(s => s.connectRoomWs)
   const selectedFlagId       = useFacilityStore(s => s.selectedFlagId)
@@ -596,6 +607,7 @@ export default function IsometricMap() {
         {sortedTiles.map(tile => {
           const fc = faceColors(tile.type, tile.status)
           const hasDefol = tile.symbols?.includes('defoliation')
+          const hasNet   = tile.symbols?.includes('net')
           const isPendingOrigin = pendingTransferOrigin === tile.id
           // Highlight eligible destinations while a transfer is pending
           const isTransferDest = !!pendingTransferOrigin
@@ -641,6 +653,7 @@ export default function IsometricMap() {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onDefolClick={hasDefol ? () => openDefolInfo(tile.id) : undefined}
+              onNetClick={hasNet ? () => openNetLog(tile.id) : undefined}
             />
           )
         })}
@@ -676,6 +689,15 @@ export default function IsometricMap() {
 
       {/* Defoliation quick-view modal (scissors click) */}
       <DefoliationInfoModal />
+
+      {/* Net log modal (net glyph click on map tile) */}
+      {netLogRoomId && (
+        <NetModal
+          roomId={netLogRoomId}
+          onClose={closeNetLog}
+          onSaved={closeNetLog}
+        />
+      )}
 
       {/* Flag drop modal — fires when symbol dragged onto a room tile */}
       {pendingDrop && (

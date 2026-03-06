@@ -5,6 +5,9 @@ import { authMiddleware } from './middleware/auth'
 import { rooms } from './routes/rooms'
 import { flags } from './routes/flags'
 import { sprayLogs } from './routes/sprayLogs'
+import { netLogs } from './routes/netLogs'
+import { potCheckLogs } from './routes/potCheckLogs'
+import { filterChangeLogs } from './routes/filterChangeLogs'
 import { calibrationLogs } from './routes/calibrationLogs'
 import { photos } from './routes/photos'
 import { events } from './routes/events'
@@ -48,6 +51,9 @@ app.get('/api/me', (c) => {
 app.route('/api/rooms', rooms)
 app.route('/api/flags', flags)
 app.route('/api/spray-logs', sprayLogs)
+app.route('/api/net-logs', netLogs)
+app.route('/api/pot-check-logs', potCheckLogs)
+app.route('/api/filter-change-logs', filterChangeLogs)
 app.route('/api/calibration-logs', calibrationLogs)
 app.route('/api/photos', photos)
 app.route('/api/events', events)
