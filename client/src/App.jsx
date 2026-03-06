@@ -8,15 +8,36 @@ import { stackInitError } from './stack'
 import './App.css'
 
 export default function App() {
+  const stackApp    = useStackApp()
   const user        = useUser({ or: 'return-null' })
   const setAuthUser = useFacilityStore(s => s.setAuthUser)
   const [greeting, setGreeting] = useState(null)
+  const [processingCallback, setProcessingCallback] = useState(false)
 
   useEffect(() => {
     if (stackInitError) {
       console.warn('[MTL] Stack Auth not available:', stackInitError)
+      return
     }
-  }, [])
+    const params = new URLSearchParams(window.location.search)
+    if (params.has('code') && params.has('state')) {
+      setProcessingCallback(true)
+      console.log('[MTL] OAuth callback detected, processing...')
+      stackApp.callOAuthCallback()
+        .then((redirected) => {
+          console.log('[MTL] OAuth callback result:', redirected)
+          if (!redirected) {
+            window.history.replaceState({}, '', '/')
+            setProcessingCallback(false)
+          }
+        })
+        .catch((err) => {
+          console.error('[MTL] OAuth callback failed:', err)
+          window.history.replaceState({}, '', '/')
+          setProcessingCallback(false)
+        })
+    }
+  }, [stackApp])
 
   useEffect(() => {
     if (user) {
@@ -38,6 +59,16 @@ export default function App() {
       setAuthUser(null)
     }
   }, [user, setAuthUser])
+
+  if (processingCallback) {
+    return (
+      <div className="app-shell">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-dim)', fontFamily: 'var(--font-mono)', fontSize: 12, letterSpacing: '2px' }}>
+          SIGNING IN...
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="app-shell">
