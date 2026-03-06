@@ -1438,3 +1438,143 @@ g[role="button"]:focus-visible {
 }
 .btn-pass.active { background: #0e2d1a; color: #4ade80; border-color: #1a4d2a; }
 .btn-fail.active { background: #2d0e0e; color: #f87171; border-color: #4d1a1a; }
+
+/* ── Auth buttons ────────────────────────────────────────────── */
+.topbar-auth-btn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.8px;
+  padding: 6px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  border: 1px solid var(--border-hi);
+  background: var(--bg-surface);
+  color: var(--text-dim);
+}
+.topbar-auth-btn:hover {
+  color: var(--text);
+  border-color: var(--text-muted);
+  background: var(--bg-elevated);
+}
+
+.topbar-auth-btn--signin {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #0a1a2e 0%, #0e2e1e 100%);
+  border: 1px solid #1a4d5a;
+  color: #7dd3fc;
+  padding: 7px 16px;
+  font-weight: 700;
+}
+.topbar-auth-btn--signin:hover {
+  background: linear-gradient(135deg, #0e2438 0%, #143d28 100%);
+  border-color: #2d8aa8;
+  color: #bae6fd;
+  box-shadow: 0 0 16px rgba(56, 189, 248, 0.1), 0 0 4px rgba(74, 222, 128, 0.08);
+}
+.topbar-auth-btn--signin:active {
+  transform: scale(0.97);
+}
+
+.topbar-user {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: var(--accent);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Welcome banner ──────────────────────────────────────────── */
+.welcome-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 24px;
+  background: linear-gradient(90deg, #0a1f14 0%, #0e1a2a 50%, #0a1f14 100%);
+  border-bottom: 1px solid #1a4d3a;
+  animation: bannerSlideIn 0.3s ease-out, bannerFadeOut 0.5s ease 4.5s forwards;
+  position: relative;
+  overflow: hidden;
+}
+.welcome-banner::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(74, 222, 128, 0.04) 50%, transparent 100%);
+  animation: bannerShimmer 2s ease-in-out infinite;
+}
+@keyframes bannerSlideIn {
+  from { transform: translateY(-100%); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+@keyframes bannerFadeOut {
+  from { opacity: 1; }
+  to   { opacity: 0; pointer-events: none; }
+}
+@keyframes bannerShimmer {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 1; }
+}
+.welcome-icon {
+  font-size: 16px;
+  color: var(--accent);
+  z-index: 1;
+}
+.welcome-text {
+  font-size: 12px;
+  color: var(--text);
+  letter-spacing: 0.3px;
+  z-index: 1;
+}
+.welcome-text strong {
+  color: var(--accent);
+  font-weight: 700;
+}
+.welcome-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: color 0.15s;
+  z-index: 1;
+}
+.welcome-dismiss:hover { color: var(--text); }
+
+/* ── Auth warning banner ─────────────────────────────────────── */
+.auth-warning {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 24px;
+  background: #1f1a0a;
+  border-bottom: 1px solid #6b530033;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: #facc15;
+  letter-spacing: 0.3px;
+}
+.auth-warning::before {
+  content: '!';
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: #6b530033;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: 900;
+  flex-shrink: 0;
+}

@@ -9,6 +9,18 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      window.addEventListener('error', function(e) {
+        var el = document.getElementById('global-error');
+        if (!el) { el = document.createElement('pre'); el.id = 'global-error'; el.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#0d0d14;color:#ff4d4d;padding:32px;overflow:auto;font-size:13px;white-space:pre-wrap;font-family:monospace'; document.body.appendChild(el); }
+        el.textContent += '[UNCAUGHT] ' + e.message + '\n' + (e.error && e.error.stack ? e.error.stack : 'at ' + e.filename + ':' + e.lineno + ':' + e.colno) + '\n\n';
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        var el = document.getElementById('global-error');
+        if (!el) { el = document.createElement('pre'); el.id = 'global-error'; el.style.cssText = 'position:fixed;inset:0;z-index:999999;background:#0d0d14;color:#ff4d4d;padding:32px;overflow:auto;font-size:13px;white-space:pre-wrap;font-family:monospace'; document.body.appendChild(el); }
+        el.textContent += '[UNHANDLED PROMISE] ' + (e.reason && e.reason.stack ? e.reason.stack : String(e.reason)) + '\n\n';
+      });
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -87,6 +87,9 @@ export const useFacilityStore = create((set, get) => ({
   drawerOpen: false,
   apiStatus: 'offline', // 'loading' | 'online' | 'offline'
 
+  authUser: null,
+  setAuthUser: (user) => set({ authUser: user }),
+
   // Mobile flag selection
   selectedFlagId: null,
 
