@@ -107,8 +107,7 @@ export const useFacilityStore = create((set, get) => ({
   defolInfoRoomId: null,
 
   // ── Transfers ─────────────────────────────────────────────────────────────
-  // Keyed by origin roomId
-  // { [originId]: { destinationId, transferDate, transferType, notes, createdAt, createdBy } }
+  // { [originId]: { destinationId, transferDate, transferType, notes, createdAt } }
   transfers: {},
 
   // First step of the two-step transfer assignment
