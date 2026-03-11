@@ -54,6 +54,7 @@ export interface Env {
   AZURE_AD_CLIENT_SECRET: string
   AZURE_AD_TENANT_ID: string
   ROOM_DO: DurableObjectNamespace
+  CONVERSATION_DO: DurableObjectNamespace
   R2_BUCKET?: R2Bucket
 }
 

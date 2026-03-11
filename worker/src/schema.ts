@@ -28,6 +28,7 @@ export const roomsRelations = relations(rooms, ({ many }) => ({
   potCheckLogs:      many(potCheckLogs),
   filterChangeLogs:  many(filterChangeLogs),
   calibrationLogs:   many(calibrationLogs),
+  ppeLogs:           many(ppeLogs),
   eventLogs:         many(eventLogs),
 }))
 
@@ -205,6 +206,51 @@ export const calibrationLogsRelations = relations(calibrationLogs, ({ one }) => 
   room: one(rooms, { fields: [calibrationLogs.roomId], references: [rooms.id] }),
 }))
 
+// ── Tasks (Whiteboard) ────────────────────────────────────────────────────
+export const tasks = pgTable(
+  'tasks',
+  {
+    id:          text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    title:       text('title').notNull(),
+    description: text('description'),
+    roomId:      text('room_id').references(() => rooms.id, { onDelete: 'set null' }),
+    assignedTo:  text('assigned_to'),
+    priority:    text('priority').notNull().default('normal'), // 'low' | 'normal' | 'high'
+    status:      text('status').notNull().default('todo'),     // 'todo' | 'in_progress' | 'done'
+    createdBy:   text('created_by').notNull(),
+    createdByName: text('created_by_name').notNull(),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+    updatedAt:   timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('tasks_status_idx').on(t.status),
+    index('tasks_room_id_idx').on(t.roomId),
+  ]
+)
+
+// ── PPE Logs ──────────────────────────────────────────────────────────────
+export const ppeLogs = pgTable(
+  'ppe_logs',
+  {
+    id:           text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    roomId:       text('room_id').notNull().references(() => rooms.id, { onDelete: 'cascade' }),
+    loggedAt:     timestamp('logged_at').notNull().defaultNow(),
+    itemsWorn:    jsonb('items_worn').notNull().default([]),  // string[] of item IDs confirmed
+    context:      text('context').notNull().default('standard'), // 'standard' | 'ipm' | 'reentry'
+    operatorId:   text('operator_id').notNull(),
+    operatorName: text('operator_name').notNull(),
+    notes:        text('notes'),
+  },
+  (t) => [
+    index('ppe_logs_room_id_idx').on(t.roomId),
+    index('ppe_logs_logged_at_idx').on(t.loggedAt),
+  ]
+)
+
+export const ppeLogsRelations = relations(ppeLogs, ({ one }) => ({
+  room: one(rooms, { fields: [ppeLogs.roomId], references: [rooms.id] }),
+}))
+
 // ── Event Logs ────────────────────────────────────────────────────────────
 export const eventLogs = pgTable(
   'event_logs',
@@ -227,4 +273,56 @@ export const eventLogs = pgTable(
 
 export const eventLogsRelations = relations(eventLogs, ({ one }) => ({
   room: one(rooms, { fields: [eventLogs.roomId], references: [rooms.id] }),
+}))
+
+// ── Conversations ──────────────────────────────────────────────────────────
+// type: 'room_channel' (one per room) | 'global' (#general, #ipm, #alerts)
+export const conversations = pgTable(
+  'conversations',
+  {
+    id:          text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    type:        text('type').notNull(),          // 'room_channel' | 'global'
+    name:        text('name').notNull(),           // '#F7' | '#general'
+    description: text('description'),
+    roomId:      text('room_id').references(() => rooms.id, { onDelete: 'cascade' }),
+    createdAt:   timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('conversations_room_id_idx').on(t.roomId),
+    index('conversations_type_idx').on(t.type),
+  ]
+)
+
+// ── Messages ───────────────────────────────────────────────────────────────
+// contentType: 'text' | 'action' | 'photo'
+// actionType:  'create_task' | 'place_overlay' | 'ipm' | 'net' | 'defoliation' | etc
+export const messages = pgTable(
+  'messages',
+  {
+    id:             text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+    conversationId: text('conversation_id').notNull().references(() => conversations.id, { onDelete: 'cascade' }),
+    senderId:       text('sender_id').notNull(),
+    senderName:     text('sender_name').notNull(),
+    content:        text('content').notNull(),
+    contentType:    text('content_type').notNull().default('text'),
+    actionType:     text('action_type'),
+    actionPayload:  jsonb('action_payload'),
+    photoUrl:       text('photo_url'),
+    replyToId:      text('reply_to_id'),
+    deletedAt:      timestamp('deleted_at'),
+    createdAt:      timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('messages_conv_id_idx').on(t.conversationId),
+    index('messages_created_at_idx').on(t.createdAt),
+  ]
+)
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, { fields: [messages.conversationId], references: [conversations.id] }),
+}))
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  room:     one(rooms, { fields: [conversations.roomId], references: [rooms.id] }),
+  messages: many(messages),
 }))

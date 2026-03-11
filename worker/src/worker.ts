@@ -9,13 +9,17 @@ import { netLogs } from './routes/netLogs'
 import { potCheckLogs } from './routes/potCheckLogs'
 import { filterChangeLogs } from './routes/filterChangeLogs'
 import { calibrationLogs } from './routes/calibrationLogs'
+import { ppeLogs } from './routes/ppeLogs'
+import { tasks } from './routes/tasks'
 import { photos } from './routes/photos'
 import { events } from './routes/events'
 import { realtime } from './routes/realtime'
 import { webhooks } from './routes/webhooks'
+import { chat, chatWs } from './routes/chat'
 import type { Env, HonoVariables } from './types'
 
 export { RoomDurableObject } from './durable-objects/RoomDurableObject'
+export { ConversationDO } from './durable-objects/ConversationDO'
 
 const app = new Hono<{ Bindings: Env; Variables: HonoVariables }>()
 
@@ -37,8 +41,9 @@ app.get('/health', (c) => c.json({ status: 'ok', ts: Date.now() }))
 // Webhook routes — auth handled internally by Bot Framework HMAC
 app.route('/webhooks', webhooks)
 
-// WebSocket upgrade route — auth via token query param
+// WebSocket upgrade routes — auth via token query param
 app.route('/ws', realtime)
+app.route('/ws/chat', chatWs)
 
 // All API routes require Stack Auth JWT
 app.use('/api/*', authMiddleware)
@@ -55,8 +60,11 @@ app.route('/api/net-logs', netLogs)
 app.route('/api/pot-check-logs', potCheckLogs)
 app.route('/api/filter-change-logs', filterChangeLogs)
 app.route('/api/calibration-logs', calibrationLogs)
+app.route('/api/ppe-logs', ppeLogs)
+app.route('/api/tasks', tasks)
 app.route('/api/photos', photos)
 app.route('/api/events', events)
+app.route('/api/chat', chat)
 
 // Global error handler
 app.onError((err, c) => {

@@ -8,9 +8,17 @@ account_id = "7c72baecd8d9d5e346b177043c3a95d1"
 name = "ROOM_DO"
 class_name = "RoomDurableObject"
 
+[[durable_objects.bindings]]
+name = "CONVERSATION_DO"
+class_name = "ConversationDO"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RoomDurableObject"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["ConversationDO"]
 
 # R2 bucket — uncomment after enabling R2 in Cloudflare Dashboard
 # [[r2_buckets]]

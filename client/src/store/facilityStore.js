@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { getToken } from '../lib/apiFetch'
 
 export const STATUS = {
   NORMAL: 'normal',
@@ -65,7 +66,8 @@ const makeEmptyTables = () =>
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
 async function apiFetch(path, options = {}) {
-  const token = localStorage.getItem('stack-auth-token')
+  // getToken() awaits stackApp.getUser() so this is race-condition safe
+  const token = await getToken()
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
@@ -219,24 +221,58 @@ export const useFacilityStore = create((set, get) => ({
       },
     })),
 
-  // Move a batch to different zones within PreVeg — records history for line rendering
+  // Move a batch to different zones within PreVeg.
+  // If the target is occupied by another batch, the two swap positions.
   movePrevegBatch: (batchId, toZones) =>
     set(state => {
       const batch = state.prevegBatches[batchId]
       if (!batch) return state
-      const same = [...batch.zones].sort().join() === [...toZones].sort().join()
-      if (same) return state
+      const toKey   = [...toZones].sort().join()
+      const fromKey = [...batch.zones].sort().join()
+      if (toKey === fromKey) return state
+
+      const now       = new Date().toISOString()
+      const fromZones = batch.zones
+      const updated   = { ...state.prevegBatches }
+
+      // Move the requested batch
+      updated[batchId] = {
+        ...batch,
+        zones: toZones,
+        zoneHistory: [...batch.zoneHistory, { fromZones, toZones, movedAt: now }],
+      }
+
+      // If another batch occupies the target, swap it back to fromZones
+      const swapId = Object.keys(updated).find(id => {
+        if (id === batchId) return false
+        return [...(state.prevegBatches[id]?.zones ?? [])].sort().join() === toKey
+      })
+      if (swapId) {
+        const swapBatch = state.prevegBatches[swapId]
+        updated[swapId] = {
+          ...swapBatch,
+          zones: fromZones,
+          zoneHistory: [
+            ...swapBatch.zoneHistory,
+            { fromZones: toZones, toZones: fromZones, movedAt: now },
+          ],
+        }
+      }
+
+      return { prevegBatches: updated }
+    }),
+
+  // Undo the last internal zone move for a batch
+  undoPrevegBatchMove: (batchId) =>
+    set(state => {
+      const batch = state.prevegBatches[batchId]
+      if (!batch?.zoneHistory?.length) return state
+      const history = [...batch.zoneHistory]
+      const last = history.pop()
       return {
         prevegBatches: {
           ...state.prevegBatches,
-          [batchId]: {
-            ...batch,
-            zones: toZones,
-            zoneHistory: [
-              ...batch.zoneHistory,
-              { fromZones: batch.zones, toZones, movedAt: new Date().toISOString() },
-            ],
-          },
+          [batchId]: { ...batch, zones: last.fromZones, zoneHistory: history },
         },
       }
     }),

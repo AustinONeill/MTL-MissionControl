@@ -156,7 +156,7 @@ const LAYOUT = [
 
 // ─── Single isometric box tile ───────────────────────────────────────────────
 function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover, onDefolClick, onNetClick,
-                  isDragOver, onDragEnter, onDragLeave, onDrop, isPendingOrigin, isTransferDest }) {
+                  isDragOver, onDragEnter, onDragLeave, onDrop, isPendingOrigin, isTransferDest, selectedFlagId }) {
   const { col, row, w, h } = room
   const s = (gx, gy) => ({ x: ox + iso(gx, gy).x, y: oy + iso(gx, gy).y })
 
@@ -313,6 +313,14 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
       {isTransferDest && room.interactive && (
         <polygon points={pts([TL, TR, BR, BL])} fill="#f59e0b" fillOpacity={0.06}
           stroke="#f59e0b" strokeWidth={1} strokeDasharray="5 3" strokeOpacity={0.5} />
+      )}
+
+      {/* Tap-to-assign ring — amber dashed ring when a flag is selected */}
+      {selectedFlagId && selectedFlagId !== 'transfer' && room.interactive && (
+        <polygon
+          className="iso-flag-ready-ring"
+          points={pts([TL, TR, BR, BL])}
+        />
       )}
 
       {/* Room name label */}
@@ -648,6 +656,7 @@ export default function IsometricMap() {
               isDragOver={dragOverId === tile.id || (selectedFlagId && selectedFlagId !== 'transfer' && hoveredId === tile.id)}
               isPendingOrigin={isPendingOrigin}
               isTransferDest={isTransferDest}
+              selectedFlagId={selectedFlagId}
               onHover={setHoveredId}
               onDragEnter={handleDragEnter}
               onDragLeave={handleDragLeave}

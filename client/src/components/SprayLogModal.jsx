@@ -1,25 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useFacilityStore } from '../store/facilityStore'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
-
-async function apiFetch(path, options = {}) {
-  const token = localStorage.getItem('stack-auth-token')
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers ?? {}),
-    },
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error ?? `HTTP ${res.status}`)
-  }
-  return res.json()
-}
+import { apiFetch } from '../lib/apiFetch'
 
 const today = () => new Date().toISOString().slice(0, 10)
 const nowTime = () => {

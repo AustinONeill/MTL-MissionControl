@@ -3,8 +3,8 @@
 **Project:** MTL Mission Control — Cultivation Facility Isometric Dashboard  
 **Author:** Austin O'Neill  
 **Repository:** https://github.com/AustinONeill/MTL-MissionControl  
-**Date:** March 5, 2026  
-**Last Updated:** March 6, 2026 — Overlay system redesign, SprayLog (F-005), NetModal, PotCheck, FilterChange, Site Calendar, Outlook export-only
+**Date:** March 5, 2026
+**Last Updated:** March 9, 2026 — Implementation status audit; PreVeg zone map; gardener YES/NO logs; zone transfer history lines
 
 ---
 
@@ -49,8 +49,10 @@ The application is divided into three distinct layers to ensure separation of co
 
 ### Application Layer
 
-- Controls drag-and-drop logic for flags on desktop via interact.js.
+- Controls drag-and-drop logic for overlays on desktop via the **HTML Drag and Drop API** (interact.js was evaluated but not adopted — see §4).
 - Controls two-step tap-to-assign on mobile: operator taps a flag to select it, then taps a room tile to assign it.
+
+> **⚑ Mar 2026 — Implementation Note:** interact.js is not installed or used. Overlay drag-and-drop uses the native HTML Drag and Drop API throughout. The client `package.json` has no interact.js dependency.
 - Manages flag state, room mode state, and re-entry countdown timers.
 - Interfaces with the backend via REST (Hono on Cloudflare Workers) and real-time WebSocket (Cloudflare Durable Objects).
 - Handles the responsive layout engine — recalculating isometric tile positions on viewport resize.
@@ -117,11 +119,13 @@ Precondition: IPM overlay is placed on a room.
 Flow: SprayLog modal opens (matching F-005 form); operator fills all required fields including batches, pesticide, times, reason, method, equipment, ratio, and quantity. The SUPV/APPV field is visible to all but **writeable only by users with `master_grower` or `director` role** (Stack Auth role claim enforced both client-side and on the API). On save: entry persisted; re-entry countdown rendered on tile from lookup table (or manual override); Teams alert sent if configured.  
 Postcondition: SprayLog persisted; room tile shows re-entry countdown badge.
 
-**UC-07: Log Calibration Event**  
-Actor: Control / Automation Engineer  
-Precondition: User accesses calibration log from room drawer or toolbox.  
-Flow: Operator selects equipment type, records pre/post readings, calibration standard, pass/fail, date, and optional notes. Entry saved to calibration log.  
+**UC-07: Log Calibration Event**
+Actor: Control / Automation Engineer
+Precondition: User accesses calibration log from room drawer or toolbox.
+Flow: Operator selects equipment type, records pre/post readings, calibration standard, pass/fail, date, and optional notes. Entry saved to calibration log.
 Postcondition: Calibration record persisted and visible in room event history.
+
+> **⚑ Mar 2026 — Implementation Note:** UC-07 is **deferred**. `CalibrationLogModal` and `CalibrationLogList` have been removed from the client. The RoomDrawer no longer has a CALIBRATION tab. The `calibration_logs` table exists in the Drizzle schema and the `/api/calibration-logs` routes are spec'd (§13) but are not wired into the deployed worker. Calibration logging is a Phase C item in the GardenerPlan.
 
 **UC-08: Attach Photo to Log Entry**  
 Actor: Any role  
@@ -161,11 +165,13 @@ Precondition: Microsoft Graph API credentials configured; harvest flag placed.
 Flow: Backend creates calendar event via Graph API `POST /me/events` with room name, date, and operator details.  
 Postcondition: All team members with calendar access see the scheduled harvest.
 
-**UC-12: Responsive Layout on Mobile**  
-Actor: All roles  
-Precondition: User accesses dashboard on a phone or tablet.  
-Flow: Viewport resize triggers responsive engine; tiles rescale via CSS custom property; toolbox collapses into bottom drawer; drag-and-drop replaced with two-step tap-to-assign.  
+**UC-12: Responsive Layout on Mobile**
+Actor: All roles
+Precondition: User accesses dashboard on a phone or tablet.
+Flow: Viewport resize triggers responsive engine; tiles rescale via CSS custom property; toolbox collapses into bottom drawer; drag-and-drop replaced with two-step tap-to-assign.
 Postcondition: Full functionality available on touch screens without drag gestures.
+
+> **⚑ Mar 2026 — Implementation Note:** There is a **duplicate UC-12** numbering above (UC-12: Query Room Status via Teams Bot and UC-12: Responsive Layout). The responsive layout use case should be renumbered UC-14. Additionally, pot_check and filter_change overlays are **not** in the LegendPanel toolbox — they are accessed only via the room drawer's POT CHECK and FILTER CHANGE tabs.
 
 ---
 
@@ -182,6 +188,8 @@ Postcondition: Full functionality available on touch screens without drag gestur
 - Each room tile renders a small badge in the top corner showing its current mode (e.g., "VEG", "FLOWER", "FLUSH").
 - Certain modes trigger a CSS animation on the tile (e.g., pulse for Maintenance, shimmer for Flush, glow for Harvest Ready).
 - Badge colors map to a consistent mode color palette defined in the design system.
+
+> **⚑ Mar 2026 — Implementation Note:** Room modes have been revised. The valid mode values are **`off | auto | crop | fill`** — the old names (veg, flower, flush, dry, maintenance, idle) are no longer used. The mode select dropdown in RoomDrawer reflects these four values. Any reference in this spec to "VEG", "FLOWER", "FLUSH", or "MAINTENANCE" modes should be treated as historical.
 
 ### Flag Icons
 
@@ -362,6 +370,8 @@ VITE_R2_PUBLIC_BASE_URL       CDN base URL for photo thumbnails
 - Each tile is a drop target (interact.js desktop) and tap target (mobile).
 - Listens for WebSocket messages from the room's Durable Object to update state in real time.
 
+> **⚑ Mar 2026 — Implementation Note:** interact.js is not used. Tiles use native HTML `onDragOver`/`onDrop` event handlers. Overlay glyphs on tiles are clickable: ✂ opens the DefoliationModal, 🕸 opens the NetModal via `openNetLog(roomId)` in the store. The `PREVEG` room tile renders an embedded `PreVegZoneMap` component (intra-room batch zone tracking) — this sub-feature is not documented in §17.
+
 ### RoomModeBadge
 
 - Small overlay on the top corner of each tile.
@@ -377,6 +387,8 @@ VITE_R2_PUBLIC_BASE_URL       CDN base URL for photo thumbnails
 - `1–60 min`: shows remaining minutes, amber background.
 - `0 or expired`: shows "CLEARED", green background; store clears `reEntryExpiresAt` for the room.
 - Props: `reEntryExpiresAt: string | null`.
+
+> **⚑ Mar 2026 — Implementation Note:** Day.js is **not installed**. The `ReEntryBadge` component, if implemented, must use native `Date` arithmetic (`Date.now()`, `new Date(reEntryExpiresAt).getTime()`) instead of `dayjs()`. As of March 2026 the re-entry countdown badge tile render is not yet implemented in `IsometricMap.jsx`.
 
 ### Header
 
@@ -435,6 +447,8 @@ interface Overlay {
 - Slide-in detail panel for a selected room.
 - Displays: room name, current mode (editable dropdown for `master_grower`+), active overlays, `SprayLogList`, `CalibrationLogList`, `NetLogList`, `PotCheckLogList`, `FilterChangeLogList`, recent event log with photo thumbnails.
 - Action buttons: Log Event, Log Spray, Log Calibration, View Timeline.
+
+> **⚑ Mar 2026 — Implementation Note:** The implemented RoomDrawer has **four tabs**: OVERVIEW | SPRAY LOGS | POT CHECK | FILTER CHANGE. There is no CALIBRATION tab, no event log list, and no action buttons (Log Event, Log Calibration, View Timeline have all been removed). The OVERVIEW tab shows: active flag chips (with inline edit buttons for defoliation/net), the active transfer card, and the PreVegZoneMap (for the PREVEG room only). POT CHECK and FILTER CHANGE tabs render a simple YES/NO interface with signed-in user attribution — no complex modal or form. `CalibrationLogList`, `NetLogList`, `PotCheckLogList`, and `FilterChangeLogList` are not implemented as separate components.
 
 ### SprayLogList
 
@@ -498,6 +512,8 @@ Opens when a Net overlay is placed or tapped on a room. Features an interactive 
 
 **Net Overlay on Room Tile:** Displays "N1" or "N2" badge. Spread = blue badge, Bend = purple badge. Once all zip ties confirmed, badge gets a green checkmark.
 
+> **⚑ Mar 2026 — Implementation Note:** The NetModal has been redesigned to a **two-card sequential flow**: Card 01 — tap to confirm net lowered (activates the SVG top-view animation); Card 02 — tap to confirm all zip ties secured (unlocked after Card 01). The per-anchor checkbox grid (`Row A/B/C/D`) is not implemented. The Net glyph (🕸) on the IsometricMap tile is clickable and triggers `openNetLog(roomId)` in the store. NetModal can also be opened from the flag-chip edit button in RoomDrawer.
+
 ### PotCheckModal
 
 Daily recurring task. Opened from the room tile's "POT" badge or the room drawer.
@@ -514,6 +530,8 @@ Daily recurring task. Opened from the room tile's "POT" badge or the room drawer
 | Performed By | Auto-filled | Stack Auth session |
 
 **Scheduling:** Internal calendar auto-generates a Pot Check task for every active grow room every day. If not logged by configurable cutoff (e.g. 14h00), room tile shows yellow "POT" badge; after cutoff it turns red and a Teams alert fires to the Master Grower.
+
+> **⚑ Mar 2026 — Implementation Note:** `PotCheckModal` is **not implemented** as a modal. Pot Check is instead a drawer tab (POT CHECK) with a simple YES/NO interface: two large tap-friendly buttons. On YES: `POST /api/pot-check-logs` with `{ roomId, completed: true, rootHealth: 'healthy' }`. On NO: posts with `rootHealth: 'concern'`. A signed-as name and timestamp display for 5 seconds after submission. The detailed field form (standing water, root health radio, conditional photo) is a planned enhancement (GardenerPlan Phase B). The overdue badge/cutoff scheduling system is not yet implemented.
 
 ### FilterChangeModal
 
@@ -534,11 +552,15 @@ Twice-weekly recurring task. Opened from the room tile's "FLT" badge or the room
 
 **Scheduling:** Internal calendar auto-generates Filter Change tasks twice per week per room (configurable days, e.g. Mon/Thu). Room tile shows an "FLT" badge (orange) when due; clears once logged.
 
+> **⚑ Mar 2026 — Implementation Note:** `FilterChangeModal` is **not implemented** as a modal. Filter Change is a drawer tab (FILTER CHANGE) with the same YES/NO interface as Pot Check. On YES: `POST /api/filter-change-logs` with `{ roomId, completed: true, newInstalled: true }`. The detailed form (filter type, size, condition) is deferred. Overdue badge/scheduling not implemented.
+
 ### CalibrationLogModal
 
 - Opens from RoomDrawer or toolbox action.
 - Fields: equipment type, pre-calibration reading, calibration standard, post-calibration reading, pass/fail, operator (auto-filled), date/time, optional notes, optional photo.
 - On submit: `POST /calibration-logs`.
+
+> **⚑ Mar 2026 — Implementation Note:** `CalibrationLogModal` is **not implemented** and does not exist in the client codebase. It was removed along with the CALIBRATION drawer tab. Deferred to GardenerPlan Phase C.
 
 ### IntegrationService (Worker module)
 
@@ -557,6 +579,10 @@ Twice-weekly recurring task. Opened from the room tile's "FLT" badge or the room
 - On `broadcast(message)` call from a Worker: sends message to all connected sockets.
 - On client WebSocket close: removes from connection set.
 
+### PreVegZoneMap
+
+> **⚑ Mar 2026 — New Component (not in original spec):** `PreVegZoneMap` is embedded inside the PREVEG room's Overview tab in RoomDrawer. It renders an SVG zone map of the pre-veg room divided into 6 zone groups (pairs of propagation tables: zones 1–2, 3–4, 5–6, 7–8, 9–10, and "Dome"). Four named batches (Early Cuts, Mid Cuts, Late Cuts, Clones) each occupy one zone group. Operators can move a batch to a different zone group (swap if occupied). Moves record a `zoneHistory` trail rendered as animated quadratic bezier arcs routed around zone cells. Undo is available per batch. State lives in `facilityStore.prevegBatches` (Zustand, client-side only).
+
 ### StateStore (Zustand)
 
 - `rooms`: map of `roomId → { name, mode, overlays: Overlay[], reEntryExpiresAt, lastUpdated }`
@@ -565,6 +591,8 @@ Twice-weekly recurring task. Opened from the room tile's "FLT" badge or the room
 - `integrations`: Teams webhook URL, Graph API token, notification preferences
 - `wsConnections`: map of `roomId → WebSocket` for Durable Object connections
 - `siteTasks`: map of `taskId → SiteTask` for calendar task state
+
+> **⚑ Mar 2026 — Implementation Note:** The Zustand store (`facilityStore.js`) also holds: `authUser` (Stack Auth user object), `transfers` (room transfer records, client-side only), `pendingTransferOrigin`, `netLogRoomId`/`openNetLog`/`closeNetLog` (net modal trigger), and `prevegBatches`/`movePrevegBatch`/`undoPrevegBatchMove` (PreVeg zone tracking). `siteTasks` is not yet implemented. `selectedOverlayType` maps to `selectedSymbol` in the actual implementation.
 
 ---
 
@@ -617,6 +645,8 @@ Twice-weekly recurring task. Opened from the room tile's "FLT" badge or the room
 5. If `notificationEnabled: true`, `sendTeamsAlert()` fires (with retry).
 6. If flag type is `HARVEST_READY`, `createOutlookEvent()` fires.
 
+> **⚑ Mar 2026 — Implementation Note:** Overlay placement uses `POST /api/rooms/:id/overlays` (not `PATCH /rooms/:id`). interact.js is not used — native HTML DnD events handle desktop drag. Teams alert and Outlook event creation on overlay placement are not yet wired up.
+
 ### Spray Log Entry
 
 1. IPM flag assigned or "Log Spray" tapped → `SprayLogModal` opens.
@@ -633,6 +663,8 @@ Twice-weekly recurring task. Opened from the room tile's "FLT" badge or the room
 3. `POST /calibration-logs` persists entry; `EventLog` record appended.
 4. Entry appears in `CalibrationLogList` in the room drawer.
 
+> **⚑ Mar 2026 — Implementation Note:** This flow is **not implemented**. See UC-07 note above.
+
 ### Re-Entry Countdown
 
 1. `ReEntryBadge` mounts with `reEntryExpiresAt` prop.
@@ -640,6 +672,8 @@ Twice-weekly recurring task. Opened from the room tile's "FLT" badge or the room
 3. `> 60`: display hours remaining, green badge.
 4. `1–60`: display minutes remaining, amber badge.
 5. `≤ 0`: display "CLEARED", green badge; store dispatches `CLEAR_REENTRY(roomId)`.
+
+> **⚑ Mar 2026 — Implementation Note:** Day.js is not installed. `ReEntryBadge` is not yet rendered on tiles in `IsometricMap.jsx`. The `reEntryExpiresAt` field is stored in the DB and returned from `GET /api/rooms` but tile-level countdown display is a pending item.
 
 ### Teams Bot Query
 
@@ -789,6 +823,8 @@ calibrationLogs    — roomId, equipmentType, preReading, standard, postReading,
                      operatorId, calibratedAt, photoUrl, notes
 eventLogs          — roomId, operatorId, action, previousValue, newValue, source, createdAt
 ```
+
+> **⚑ Mar 2026 — Implementation Note:** The canonical Drizzle schema (`worker/src/schema.ts`) defines the following tables: `rooms`, `overlays`, `sprayLogs`, `netLogs`, `potCheckLogs`, `filterChangeLogs`, `calibrationLogs`, `eventLogs`. Tables planned in the GardenerPlan (daily_checklists, ipm_scouts, pressure_maps, waste_logs, shift_summaries) are **not yet added** to the schema. The `calibration_logs` table exists but has no active worker routes or client UI.
 
 Legacy Prisma schema snapshot (pre-migration, kept for reference only):
 
@@ -1141,6 +1177,8 @@ GET  /calibration-logs?roomId=&from=&to=
   Response: 200 [CalibrationLog]
 ```
 
+> **⚑ Mar 2026 — Implementation Note:** Calibration log routes are **not implemented** in `worker/src/worker.ts`. The schema table exists but no route file has been created. Site Tasks and Recurring Tasks routes are also not yet implemented.
+
 ### Photos
 
 ```
@@ -1207,6 +1245,8 @@ document.documentElement.style.setProperty('--map-scale', scale);
 ### Touch Interaction Model
 
 On desktop, interact.js handles drag-and-drop via pointer events.
+
+> **⚑ Mar 2026 — Implementation Note:** interact.js is not used. Desktop drag uses the native HTML Drag and Drop API (`draggable`, `onDragStart`, `onDragOver`, `onDrop`).
 
 On mobile, a two-step tap model replaces drag:
 
@@ -1442,11 +1482,17 @@ export const roomTransfers = pgTable('room_transfers', {
 
 API routes: `POST /api/transfers`, `PATCH /api/transfers/:id`, `DELETE /api/transfers/:id`, `GET /api/rooms/:id/transfers`.
 
+### PreVeg Internal Zone Transfers
+
+> **⚑ Mar 2026 — New Feature (not in original spec):** The PREVEG room supports a separate **intra-room batch zone transfer** system, distinct from the inter-room transfer feature above. Four propagation batches (Early Cuts, Mid Cuts, Late Cuts, Clones) each occupy one of six zone groups. Operators can move (or swap) batches between zone groups using the `PreVegZoneMap` component in the room drawer. Each move appends a `{ fromZones, toZones, movedAt }` entry to the batch's `zoneHistory`, rendered as animated bezier arcs on the SVG map. Undo removes the last history entry. State is Zustand-only (no API persistence yet). A future `preveg_zone_history` table should be added to the schema.
+
 ---
 
 ## 18. Site Calendar
 
 The internal site calendar is the **source of truth for daily operations**. Outlook is an export target only (see Section 15).
+
+> **⚑ Mar 2026 — Implementation Note:** The Site Calendar is **not yet implemented**. No calendar UI, recurring task engine, or SiteTask/RecurringTask API routes exist in the deployed system. This is a Phase C/D item in the GardenerPlan. The Drizzle schema does not yet have `site_tasks` or `recurring_tasks` tables.
 
 ### Features
 
@@ -1487,6 +1533,8 @@ The internal site calendar is the **source of truth for daily operations**. Outl
 ---
 
 ## 20. Testing Strategy
+
+> **⚑ Mar 2026 — Implementation Note:** **No tests exist yet.** There is no Jest config, React Testing Library setup, or Playwright config in the repository. CI/CD via GitHub Actions is also not configured (`.github/workflows/` does not exist). The test strategy below is the intended target. Priority tests per the GardenerPlan: PreVeg zone swap logic, YES/NO log submission, overlay placement/removal, and SprayLogModal validation.
 
 ### Unit Tests (Jest)
 
@@ -1531,6 +1579,6 @@ The internal site calendar is the **source of truth for daily operations**. Outl
 - Microsoft. (2024). *Create Incoming Webhooks in Microsoft Teams*. https://learn.microsoft.com/en-us/microsoftteams/platform/webhooks-and-connectors/how-to/add-incoming-webhook
 - Microsoft. (2024). *Adaptive Cards for Teams*. https://learn.microsoft.com/en-us/microsoftteams/platform/task-modules-and-cards/cards/design-effective-cards
 - Microsoft. (2024). *Outlook Calendar API overview — Microsoft Graph*. https://learn.microsoft.com/en-us/graph/outlook-calendar-concept-overview
-- interact.js. (2024). *Drag and Drop & Resizing for the Modern Web*. https://interactjs.io
+- interact.js. (2024). *Drag and Drop & Resizing for the Modern Web*. https://interactjs.io *(evaluated but not adopted — native HTML DnD used instead)*
 - Kenney. (2024). *Isometric Asset Packs*. https://kenney.nl/assets?q=isometric
-- Day.js. (2024). *Fast 2kB alternative to Moment.js*. https://day.js.org
+- Day.js. (2024). *Fast 2kB alternative to Moment.js*. https://day.js.org *(evaluated but not installed — native Date arithmetic used)*

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useFacilityStore, STATUS, MODES } from '../store/facilityStore'
 import DefoliationModal from './DefoliationModal'
 import SprayLogModal from './SprayLogModal'
@@ -6,34 +7,8 @@ import SprayLogList from './SprayLogList'
 import TransferModal from './TransferModal'
 import NetModal from './NetModal'
 import PreVegZoneMap from './PreVegZoneMap'
-
-const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
-
-async function apiFetch(path, options = {}) {
-  const token = localStorage.getItem('stack-auth-token')
-  const res = await fetch(`${API_BASE}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(options.headers ?? {}),
-    },
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(err.error ?? `HTTP ${res.status}`)
-  }
-  return res.json()
-}
-
-async function uploadPhoto(roomId, logType, file) {
-  const presign = await apiFetch('/api/photos/presign', {
-    method: 'POST',
-    body: JSON.stringify({ roomId, logType, contentType: file.type }),
-  })
-  await fetch(presign.uploadUrl, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-  return presign.publicUrl
-}
+import { getRelevantSops, getSopForOverlay } from '../data/sops'
+import { apiFetch, uploadPhoto } from '../lib/apiFetch'
 
 const STATUS_LABEL = {
   [STATUS.NORMAL]: 'NORMAL',
@@ -76,22 +51,23 @@ const SYMBOL_DISPLAY = {
   issue:         { glyph: '⚠',  label: 'Open Issue' },
 }
 
-const DRAWER_TABS = ['OVERVIEW', 'SPRAY LOGS', 'POT CHECK', 'FILTER CHANGE']
+const DRAWER_TABS = ['OVERVIEW', 'SPRAY LOGS', 'CHECKS', 'PPE', 'SOPs']
 
-// ── Simple Yes/No log tab ──────────────────────────────────────────────────
-function YesNoTab({ label, apiPath, bodyFn }) {
+// ── Yes/No quick log ───────────────────────────────────────────────────────
+function YesNoLog({ label, apiPath, bodyFn }) {
+  const authUser    = useFacilityStore(s => s.authUser)
   const [submitting, setSubmitting] = useState(false)
-  const [saved, setSaved]           = useState(null) // 'yes' | 'no' | null
+  const [saved, setSaved]           = useState(null)
   const [error, setError]           = useState(null)
+  const displayName = authUser?.displayName ?? authUser?.primaryEmail ?? 'Unknown'
 
   const handleTap = async (completed) => {
     setSubmitting(true); setError(null)
+    const now = new Date()
     try {
-      if (API_BASE) {
-        await apiFetch(apiPath, { method: 'POST', body: JSON.stringify(bodyFn(completed)) })
-      }
-      setSaved(completed ? 'yes' : 'no')
-      setTimeout(() => setSaved(null), 3000)
+      if (API_BASE) await apiFetch(apiPath, { method: 'POST', body: JSON.stringify(bodyFn(completed)) })
+      setSaved({ completed, by: displayName, at: now })
+      setTimeout(() => setSaved(null), 5000)
     } catch (err) {
       setError(err.message)
     } finally {
@@ -100,40 +76,271 @@ function YesNoTab({ label, apiPath, bodyFn }) {
   }
 
   if (saved) return (
-    <div className="drawer-section yn-confirm" style={{ color: saved === 'yes' ? '#4ade80' : '#f87171' }}>
-      {saved === 'yes' ? `✓ ${label} — Complete` : `✕ ${label} — Not Done`}
+    <div className="yn-confirm" style={{ color: saved.completed ? '#4ade80' : '#f87171' }}>
+      <div className="yn-confirm-status">{saved.completed ? `✓ ${label} — Complete` : `✕ ${label} — Not Done`}</div>
+      <div className="yn-confirm-meta">
+        <span className="yn-confirm-by">{saved.by}</span>
+        <span className="yn-confirm-at">
+          {saved.at.toLocaleTimeString('en-CA', { hour: '2-digit', minute: '2-digit', hour12: false })}
+          {' · '}{saved.at.toLocaleDateString('en-CA', { month: 'short', day: 'numeric' })}
+        </span>
+      </div>
     </div>
   )
 
   return (
-    <section className="drawer-section">
+    <div className="checks-yn-block">
       <p className="yn-prompt">{label} complete?</p>
+      <div className="yn-signed-as">Signing as <strong>{displayName}</strong></div>
       {error && <p className="form-error">{error}</p>}
       <div className="yn-btn-row">
         <button className="yn-btn yn-btn--yes" disabled={submitting} onClick={() => handleTap(true)}>YES</button>
         <button className="yn-btn yn-btn--no"  disabled={submitting} onClick={() => handleTap(false)}>NO</button>
       </div>
+    </div>
+  )
+}
+
+// ── SOP Viewer Modal ───────────────────────────────────────────────────────
+function SopViewerModal({ sop, onClose }) {
+  return createPortal(
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal-panel"
+        style={{ maxWidth: 520, width: '95vw' }}
+        onClick={e => e.stopPropagation()}
+        role="dialog"
+        aria-modal="true"
+      >
+        <div className="modal-header">
+          <span className="modal-glyph">📋</span>
+          <span className="modal-title">{sop.id}</span>
+          <span className="modal-room">v{sop.version}</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div style={{ padding: '0 24px 24px' }}>
+          <p style={{ fontFamily: 'var(--font-mono)', fontSize: 14, fontWeight: 700, color: '#e0e0f0', marginBottom: 16 }}>
+            {sop.title}
+          </p>
+          <ol className="sop-steps sop-steps--modal">
+            {sop.steps.map((step, i) => (
+              <li key={i} className="sop-step">{step}</li>
+            ))}
+          </ol>
+        </div>
+      </div>
+    </div>,
+    document.body
+  )
+}
+
+// ── CHECKS tab — Pot Check + Filter Change ────────────────────────────────
+function ChecksTab({ roomId }) {
+  const [sub, setSub] = useState('pot')
+  return (
+    <section className="drawer-section">
+      <div className="checks-sub-nav">
+        <button className={`checks-sub-btn ${sub === 'pot' ? 'active' : ''}`} onClick={() => setSub('pot')}>
+          🪴 Pot Check
+        </button>
+        <button className={`checks-sub-btn ${sub === 'filter' ? 'active' : ''}`} onClick={() => setSub('filter')}>
+          🌬 Filter Change
+        </button>
+      </div>
+      {sub === 'pot' && (
+        <YesNoLog
+          key={`pot-${roomId}`}
+          label="Pot Check"
+          apiPath="/api/pot-check-logs"
+          bodyFn={(completed) => ({ roomId, completed, rootHealth: completed ? 'healthy' : 'concern' })}
+        />
+      )}
+      {sub === 'filter' && (
+        <YesNoLog
+          key={`filter-${roomId}`}
+          label="Filter Change"
+          apiPath="/api/filter-change-logs"
+          bodyFn={(completed) => ({ roomId, completed, newInstalled: completed })}
+        />
+      )}
     </section>
   )
 }
 
-function PotCheckTab({ roomId }) {
+// ── PPE items config ───────────────────────────────────────────────────────
+const BASE_PPE = [
+  { id: 'gloves',  label: 'Nitrile Gloves',  icon: '🧤' },
+  { id: 'glasses', label: 'Safety Glasses',   icon: '🥽' },
+  { id: 'boots',   label: 'Rubber Boots',     icon: '🥾' },
+]
+const IPM_PPE = [
+  { id: 'respirator', label: 'N95/P100 Respirator', icon: '😷', required: true },
+  { id: 'coverall',   label: 'Disposable Coverall',  icon: '🦺', required: true },
+  { id: 'faceshield', label: 'Face Shield',           icon: '🛡️', required: false },
+]
+const REENTRY_PPE = [
+  { id: 'respirator', label: 'N95/P100 Respirator', icon: '😷', required: true },
+  { id: 'coverall',   label: 'Disposable Coverall',  icon: '🦺', required: true },
+]
+
+function getPpeItems(symbols, hasReentry) {
+  if (hasReentry) return [...BASE_PPE, ...REENTRY_PPE]
+  if (symbols?.includes('ipm')) return [...BASE_PPE, ...IPM_PPE]
+  return BASE_PPE
+}
+
+function getPpeContext(symbols, hasReentry) {
+  if (hasReentry) return 'reentry'
+  if (symbols?.includes('ipm')) return 'ipm'
+  return 'standard'
+}
+
+// ── PPE tab ────────────────────────────────────────────────────────────────
+function PPETab({ roomId, symbols, reEntryExpiresAt }) {
+  const authUser    = useFacilityStore(s => s.authUser)
+  const hasReentry  = reEntryExpiresAt && new Date(reEntryExpiresAt) > new Date()
+  const items       = getPpeItems(symbols, hasReentry)
+  const context     = getPpeContext(symbols, hasReentry)
+  const [checked, setChecked]     = useState({})
+  const [submitting, setSubmitting] = useState(false)
+  const [saved, setSaved]           = useState(false)
+  const [error, setError]           = useState(null)
+  const [notes, setNotes]           = useState('')
+
+  const toggle = (id) => setChecked(c => ({ ...c, [id]: !c[id] }))
+  const allRequired = items.filter(i => i.required !== false).every(i => checked[i.id])
+  const anyChecked  = items.some(i => checked[i.id])
+
+  const handleConfirm = async () => {
+    const worn = items.filter(i => checked[i.id]).map(i => i.id)
+    setSubmitting(true); setError(null)
+    try {
+      if (API_BASE) {
+        await apiFetch('/api/ppe-logs', {
+          method: 'POST',
+          body: JSON.stringify({ roomId, itemsWorn: worn, context, notes: notes || undefined }),
+        })
+      }
+      setSaved(true)
+      setTimeout(() => { setSaved(false); setChecked({}); setNotes('') }, 6000)
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  if (saved) return (
+    <section className="drawer-section">
+      <div className="ppe-confirmed">
+        <div className="ppe-confirmed-icon">✓</div>
+        <div className="ppe-confirmed-text">PPE CONFIRMED</div>
+        <div className="ppe-confirmed-sub">Entry logged for {authUser?.name ?? 'operator'}</div>
+      </div>
+    </section>
+  )
+
   return (
-    <YesNoTab
-      label="Pot Check"
-      apiPath="/api/pot-check-logs"
-      bodyFn={(completed) => ({ roomId, completed, rootHealth: completed ? 'healthy' : 'concern' })}
-    />
+    <section className="drawer-section">
+      {hasReentry && (
+        <div className="ppe-reentry-banner">
+          ⚠ RE-ENTRY PERIOD ACTIVE — enhanced PPE required
+        </div>
+      )}
+      {context === 'ipm' && !hasReentry && (
+        <div className="ppe-context-banner ppe-context-banner--ipm">
+          🐛 IPM active — respiratory protection required
+        </div>
+      )}
+
+      <h3 className="section-title">CONFIRM PPE</h3>
+      <p className="ppe-instruction">Check each item worn before entering the room.</p>
+
+      <div className="ppe-checklist">
+        {items.map(item => (
+          <label key={item.id} className={`ppe-item ${checked[item.id] ? 'ppe-item--checked' : ''}`}>
+            <input
+              type="checkbox"
+              checked={!!checked[item.id]}
+              onChange={() => toggle(item.id)}
+            />
+            <span className="ppe-item-icon">{item.icon}</span>
+            <span className="ppe-item-label">{item.label}</span>
+            {item.required && <span className="ppe-item-req">*</span>}
+          </label>
+        ))}
+      </div>
+
+      <div className="form-row" style={{ marginTop: 12 }}>
+        <label>Notes</label>
+        <textarea
+          value={notes}
+          onChange={e => setNotes(e.target.value)}
+          rows={2}
+          placeholder="Optional…"
+        />
+      </div>
+
+      {error && <p className="form-error">{error}</p>}
+
+      <button
+        className="btn-primary"
+        style={{ marginTop: 14, width: '100%' }}
+        disabled={submitting || !anyChecked || !allRequired}
+        onClick={handleConfirm}
+      >
+        {submitting ? 'Saving…' : 'Confirm Entry'}
+      </button>
+      {!allRequired && anyChecked && (
+        <p className="ppe-warning">Required items (*) must be checked before confirming.</p>
+      )}
+    </section>
   )
 }
 
-function FilterChangeTab({ roomId }) {
+// ── SOPs tab ───────────────────────────────────────────────────────────────
+function SOPsTab({ symbols }) {
+  const sops = getRelevantSops(symbols)
+  const [acknowledged, setAcknowledged] = useState({})
+
   return (
-    <YesNoTab
-      label="Filter Change"
-      apiPath="/api/filter-change-logs"
-      bodyFn={(completed) => ({ roomId, completed, newInstalled: completed })}
-    />
+    <section className="drawer-section">
+      <h3 className="section-title">STANDARD OPERATING PROCEDURES</h3>
+      <p className="sop-subtitle">{sops.length} SOP{sops.length !== 1 ? 's' : ''} relevant to this room</p>
+
+      <div className="sop-list">
+        {sops.map(sop => {
+          const ack = acknowledged[sop.id]
+          return (
+            <div key={sop.id} className={`sop-card ${ack ? 'sop-card--acked' : ''}`}>
+              <div className="sop-card-header">
+                <div className="sop-card-meta">
+                  <span className="sop-id">{sop.id}</span>
+                  <span className="sop-version">v{sop.version}</span>
+                  {ack && <span className="sop-ack-chip">✓ Read</span>}
+                </div>
+                <div className="sop-card-title">{sop.title}</div>
+              </div>
+              <div className="sop-card-body">
+                <ol className="sop-steps">
+                  {sop.steps.map((step, i) => (
+                    <li key={i} className="sop-step">{step}</li>
+                  ))}
+                </ol>
+                {!ack && (
+                  <button
+                    className="btn-primary sop-ack-btn"
+                    onClick={() => setAcknowledged(a => ({ ...a, [sop.id]: true }))}
+                  >
+                    ✓ Acknowledge
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 
@@ -145,8 +352,8 @@ export default function RoomDrawer() {
   const transferAsDest   = room
     ? Object.entries(transfers).find(([, t]) => t.destinationId === room.id)
     : null
-  const sc   = room ? STATUS_COLORS[room.status] ?? STATUS_COLORS[STATUS.NORMAL] : STATUS_COLORS[STATUS.NORMAL]
-  const tc   = room ? (TYPE_COLOR[room.type] || TYPE_COLOR.utility) : TYPE_COLOR.utility
+  const sc = room ? STATUS_COLORS[room.status] ?? STATUS_COLORS[STATUS.NORMAL] : STATUS_COLORS[STATUS.NORMAL]
+  const tc = room ? (TYPE_COLOR[room.type] || TYPE_COLOR.utility) : TYPE_COLOR.utility
 
   const [tab, setTab]               = useState('OVERVIEW')
   const [defolOpen, setDefolOpen]   = useState(false)
@@ -154,6 +361,7 @@ export default function RoomDrawer() {
   const [transferOpen, setTransferOpen] = useState(false)
   const [netOpen, setNetOpen]       = useState(false)
   const [sprayKey, setSprayKey]     = useState(0)
+  const [sopViewing, setSopViewing] = useState(null) // sop object | null
 
   const hasDefoliation = room?.symbols?.includes('defoliation')
 
@@ -218,39 +426,36 @@ export default function RoomDrawer() {
             {/* ── Tab: Overview ────────────────────────────────────── */}
             {tab === 'OVERVIEW' && (
               <>
-                {/* Active flags */}
                 {room.symbols?.length > 0 && (
                   <section className="drawer-section">
                     <h3 className="section-title">ACTIVE FLAGS</h3>
                     <div className="flags-grid">
                       {room.symbols.map(sym => {
-                        const s = SYMBOL_DISPLAY[sym]
+                        const s   = SYMBOL_DISPLAY[sym]
                         if (!s) return null
                         const isDefol = sym === 'defoliation'
                         const isNet   = sym === 'net'
+                        const sop     = getSopForOverlay(sym)
                         return (
                           <div key={sym} className={`flag-chip ${(isDefol || isNet) ? 'flag-chip--editable' : ''}`}>
                             <span className="flag-glyph">{s.glyph}</span>
                             <span className="flag-label">{s.label}</span>
-                            {isDefol && (
+                            {sop && (
                               <button
-                                className="flag-edit-btn"
-                                onClick={() => setDefolOpen(true)}
-                                aria-label="Edit defoliation progress"
-                                title="Edit table progress"
+                                className="flag-sop-btn"
+                                onClick={() => setSopViewing(sop)}
+                                aria-label={`View SOP for ${s.label}`}
                               >
-                                ✏
+                                SOP
                               </button>
                             )}
+                            {isDefol && (
+                              <button className="flag-edit-btn" onClick={() => setDefolOpen(true)}
+                                aria-label="Edit defoliation progress">✏</button>
+                            )}
                             {isNet && (
-                              <button
-                                className="flag-edit-btn"
-                                onClick={() => setNetOpen(true)}
-                                aria-label="Edit net log"
-                                title="Log net status"
-                              >
-                                ✏
-                              </button>
+                              <button className="flag-edit-btn" onClick={() => setNetOpen(true)}
+                                aria-label="Log net status">✏</button>
                             )}
                           </div>
                         )
@@ -259,7 +464,6 @@ export default function RoomDrawer() {
                   </section>
                 )}
 
-                {/* Transfer info card */}
                 {(transferAsOrigin || transferAsDest) && (
                   <section className="drawer-section">
                     <h3 className="section-title">ACTIVE TRANSFER</h3>
@@ -309,10 +513,8 @@ export default function RoomDrawer() {
                   </section>
                 )}
 
-                {/* PRE-VEG zone map */}
                 {room.id === 'PREVEG' && <PreVegZoneMap />}
 
-                {/* Dev status override */}
                 <section className="drawer-section">
                   <h3 className="section-title" style={{ opacity: 0.4 }}>DEV – STATUS OVERRIDE</h3>
                   <div className="status-override-row">
@@ -341,30 +543,32 @@ export default function RoomDrawer() {
               </section>
             )}
 
-            {/* ── Tab: Pot Check ────────────────────────────────────── */}
-            {tab === 'POT CHECK' && (
-              <PotCheckTab key={room.id} roomId={room.id} />
+            {/* ── Tab: Checks ──────────────────────────────────────── */}
+            {tab === 'CHECKS' && (
+              <ChecksTab key={room.id} roomId={room.id} />
             )}
 
-            {/* ── Tab: Filter Change ────────────────────────────────── */}
-            {tab === 'FILTER CHANGE' && (
-              <FilterChangeTab key={room.id} roomId={room.id} />
+            {/* ── Tab: PPE ─────────────────────────────────────────── */}
+            {tab === 'PPE' && (
+              <PPETab
+                key={room.id}
+                roomId={room.id}
+                symbols={room.symbols}
+                reEntryExpiresAt={room.reEntryExpiresAt}
+              />
             )}
 
-
+            {/* ── Tab: SOPs ────────────────────────────────────────── */}
+            {tab === 'SOPs' && (
+              <SOPsTab key={room.id} symbols={room.symbols} />
+            )}
           </>
         )}
       </aside>
 
-      {/* Modals */}
       {defolOpen && room && hasDefoliation && (
-        <DefoliationModal
-          roomId={room.id}
-          roomName={room.name}
-          onClose={() => setDefolOpen(false)}
-        />
+        <DefoliationModal roomId={room.id} roomName={room.name} onClose={() => setDefolOpen(false)} />
       )}
-
       {sprayOpen && room && (
         <SprayLogModal
           roomId={room.id}
@@ -372,20 +576,14 @@ export default function RoomDrawer() {
           onSaved={() => { setSprayKey(k => k + 1); setTab('SPRAY LOGS') }}
         />
       )}
-
       {transferOpen && room && transferAsOrigin && (
-        <TransferModal
-          originRoomId={room.id}
-          onClose={() => setTransferOpen(false)}
-        />
+        <TransferModal originRoomId={room.id} onClose={() => setTransferOpen(false)} />
       )}
-
       {netOpen && room && (
-        <NetModal
-          roomId={room.id}
-          onClose={() => setNetOpen(false)}
-          onSaved={() => setNetOpen(false)}
-        />
+        <NetModal roomId={room.id} onClose={() => setNetOpen(false)} onSaved={() => setNetOpen(false)} />
+      )}
+      {sopViewing && (
+        <SopViewerModal sop={sopViewing} onClose={() => setSopViewing(null)} />
       )}
     </>
   )

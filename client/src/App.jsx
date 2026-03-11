@@ -2,17 +2,30 @@ import { useEffect, useState } from 'react'
 import { useUser, useStackApp } from '@stackframe/stack'
 import IsometricMap from './components/IsometricMap'
 import RoomDrawer from './components/RoomDrawer'
-import LegendPanel from './components/LegendPanel'
+import LegendPanel, { SYMBOL_ITEMS } from './components/LegendPanel'
+import WhiteboardPanel from './components/WhiteboardPanel'
+import ChatPanel from './components/ChatPanel'
+import ChatNotificationBanner from './components/ChatNotificationBanner'
 import { useFacilityStore } from './store/facilityStore'
+import { useChatStore } from './store/chatStore'
 import { stackInitError } from './stack'
+import { setAuthToken } from './lib/apiFetch'
 import './App.css'
 
 export default function App() {
-  const stackApp    = useStackApp()
-  const user        = useUser({ or: 'return-null' })
-  const setAuthUser = useFacilityStore(s => s.setAuthUser)
-  const [greeting, setGreeting] = useState(null)
+  const stackApp        = useStackApp()
+  const user            = useUser({ or: 'return-null' })
+  const setAuthUser     = useFacilityStore(s => s.setAuthUser)
+  const drawerOpen      = useFacilityStore(s => s.drawerOpen)
+  const selectedFlagId  = useFacilityStore(s => s.selectedFlagId)
+  const selectFlag      = useFacilityStore(s => s.selectFlag)
+  const clearSelectedFlag = useFacilityStore(s => s.clearSelectedFlag)
+  const [greeting, setGreeting]               = useState(null)
   const [processingCallback, setProcessingCallback] = useState(false)
+  const [toolboxOpen, setToolboxOpen]         = useState(false)
+  const [whiteboardOpen, setWhiteboardOpen]   = useState(false)
+  const [chatOpen, setChatOpen]               = useState(false)
+  const totalUnread = useChatStore(s => Object.values(s.unread).reduce((a, b) => a + b, 0))
 
   useEffect(() => {
     if (stackInitError) {
@@ -42,7 +55,10 @@ export default function App() {
   useEffect(() => {
     if (user) {
       user.getAuthJson().then(({ accessToken }) => {
-        if (accessToken) localStorage.setItem('stack-auth-token', accessToken)
+        if (accessToken) {
+          setAuthToken(accessToken)
+          localStorage.setItem('stack-auth-token', accessToken)
+        }
       }).catch((e) => console.error('[MTL] getAuthJson failed:', e))
 
       const name = user.displayName ?? user.primaryEmail ?? 'there'
@@ -55,10 +71,16 @@ export default function App() {
         setTimeout(() => setGreeting(null), 5000)
       }
     } else {
+      setAuthToken(null)
       localStorage.removeItem('stack-auth-token')
       setAuthUser(null)
     }
   }, [user, setAuthUser])
+
+  // Auto-close toolbox when room drawer opens
+  useEffect(() => {
+    if (drawerOpen) setToolboxOpen(false)
+  }, [drawerOpen])
 
   if (processingCallback) {
     return (
@@ -72,7 +94,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Header user={user} />
+      <Header user={user} onWhiteboardOpen={() => setWhiteboardOpen(true)} onChatOpen={() => setChatOpen(true)} chatUnread={totalUnread} />
       {stackInitError && (
         <div className="auth-warning">Auth disabled: {stackInitError}</div>
       )}
@@ -82,7 +104,51 @@ export default function App() {
       </main>
       <LegendPanel />
       <RoomDrawer />
+      <WhiteboardPanel open={whiteboardOpen} onClose={() => setWhiteboardOpen(false)} />
+      <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
+      <ChatNotificationBanner onOpenChat={() => setChatOpen(true)} />
       <LiveClock />
+
+      {/* Mobile FAB */}
+      <button
+        className={`fab-toolbox${selectedFlagId ? ' fab-toolbox--cancel' : ''}`}
+        onClick={() => {
+          if (selectedFlagId) { clearSelectedFlag(); return }
+          setToolboxOpen(o => !o)
+        }}
+        aria-label={selectedFlagId ? 'Cancel overlay' : 'Open toolbox'}
+      >
+        {selectedFlagId ? '✕' : '+'}
+      </button>
+
+      {/* Mobile Toolbox Bottom Sheet */}
+      {toolboxOpen && (
+        <div
+          className="mobile-toolbox-sheet-backdrop"
+          onClick={() => setToolboxOpen(false)}
+        />
+      )}
+      <div className={`mobile-toolbox-sheet${toolboxOpen ? ' open' : ''}`}>
+        <div className="mobile-toolbox-sheet-handle" />
+        <p className="mobile-toolbox-title">
+          {selectedFlagId ? 'TAP A ROOM TO PLACE' : 'SELECT OVERLAY'}
+        </p>
+        <div className="mobile-toolbox-grid">
+          {SYMBOL_ITEMS.map(item => (
+            <button
+              key={item.key}
+              className={`mobile-toolbox-item${selectedFlagId === item.key ? ' mobile-toolbox-item--active' : ''}`}
+              onClick={() => {
+                selectFlag(item.key)
+                setToolboxOpen(false)
+              }}
+            >
+              <span className="mobile-toolbox-glyph">{item.glyph}</span>
+              <span className="mobile-toolbox-label">{item.label}</span>
+            </button>
+          ))}
+        </div>
+      </div>
     </div>
   )
 }
@@ -102,7 +168,7 @@ function WelcomeBanner({ name, onDismiss }) {
   )
 }
 
-function Header({ user }) {
+function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread }) {
   const stackApp = useStackApp()
 
   return (
@@ -138,6 +204,12 @@ function Header({ user }) {
             Sign in with Microsoft
           </button>
         )}
+        <button className="topbar-wb-btn" onClick={onWhiteboardOpen} aria-label="Open whiteboard">
+          BOARD
+        </button>
+        <button className="topbar-chat-btn" onClick={onChatOpen} aria-label="Open chat">
+          💬{chatUnread > 0 && <span className="topbar-chat-badge">{chatUnread > 99 ? '99+' : chatUnread}</span>}
+        </button>
         <span className="topbar-status-indicator online" />
         <span className="topbar-status-text">LIVE</span>
         <span className="topbar-time" id="clock" />
