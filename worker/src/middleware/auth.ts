@@ -54,13 +54,17 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: HonoV
       const name = (payload['name'] as string) ?? email
 
       c.set('user', { userId, role, email, name })
-      await next()
     } catch (err: unknown) {
       const errName = (err as { name?: string })?.name ?? 'unknown'
       const msg     = (err as { message?: string })?.message ?? String(err)
       console.error('[auth] verification failed:', errName, msg)
       return c.json({ error: 'Invalid or expired token', code: 401, reason: `${errName}: ${msg}` }, 401)
     }
+
+    // IMPORTANT: next() must be OUTSIDE the try/catch above, otherwise
+    // downstream route errors (e.g. Durable Object failures) get caught
+    // and misreported as 401 "Invalid or expired token".
+    await next()
   }
 )
 

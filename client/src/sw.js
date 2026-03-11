@@ -10,9 +10,11 @@ cleanupOutdatedCaches()
 self.addEventListener('install',  () => self.skipWaiting())
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()))
 
-// API calls: never cache
+// Cross-origin API calls (workers.dev) are not intercepted — unmatched routes
+// pass through the SW natively, which avoids any SW-introduced CORS issues.
+// Only register NetworkOnly for same-origin /api/ paths if Pages ever proxies them.
 registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/') || url.hostname.includes('workers.dev'),
+  ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/api/'),
   new NetworkOnly()
 )
 

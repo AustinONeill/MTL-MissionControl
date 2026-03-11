@@ -38,27 +38,7 @@ app.use(
 // Public health check
 app.get('/health', (c) => c.json({ status: 'ok', ts: Date.now() }))
 
-// Auth debug — decodes token WITHOUT verification, shows what aud/iss the JWT carries
-app.get('/auth-debug', (c) => {
-  const auth = c.req.header('Authorization')
-  if (!auth?.startsWith('Bearer ')) return c.json({ error: 'no token' }, 400)
-  try {
-    const [, payload] = auth.slice(7).split('.')
-    const decoded = JSON.parse(atob(payload))
-    return c.json({
-      aud: decoded.aud,
-      iss: decoded.iss,
-      sub: decoded.sub,
-      exp: decoded.exp,
-      exp_human: new Date((decoded.exp ?? 0) * 1000).toISOString(),
-      expired: decoded.exp ? decoded.exp * 1000 < Date.now() : 'no exp',
-      expected_aud: c.env.STACK_AUTH_PROJECT_ID,
-      expected_jwks: c.env.STACK_AUTH_JWKS_URL,
-    })
-  } catch (e) {
-    return c.json({ error: 'decode failed', detail: String(e) }, 400)
-  }
-})
+
 
 // Webhook routes — auth handled internally by Bot Framework HMAC
 app.route('/webhooks', webhooks)
@@ -88,10 +68,15 @@ app.route('/api/photos', photos)
 app.route('/api/events', events)
 app.route('/api/chat', chat)
 
-// Global error handler
+// Global error handler — must include CORS headers since thrown errors
+// bypass Hono's cors() middleware response processing
 app.onError((err, c) => {
   console.error('Unhandled error:', err)
-  return c.json({ error: 'Internal server error', code: 500 }, 500)
+  const origin = c.req.header('Origin') ?? '*'
+  return c.json({ error: 'Internal server error', code: 500 }, 500, {
+    'Access-Control-Allow-Origin': origin,
+    'Access-Control-Allow-Credentials': 'true',
+  })
 })
 
 app.notFound((c) => c.json({ error: 'Not found', code: 404 }, 404))

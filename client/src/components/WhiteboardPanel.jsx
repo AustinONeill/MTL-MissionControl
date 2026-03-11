@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { useFacilityStore } from '../store/facilityStore'
 import { apiFetch } from '../lib/apiFetch'
 
@@ -13,45 +13,43 @@ const NEXT_STATUS = { todo: 'in_progress', in_progress: 'done', done: 'todo' }
 const PRIORITY_COLOR = { low: '#6b7280', normal: '#60a5fa', high: '#f87171' }
 
 export default function WhiteboardPanel({ open, onClose }) {
-  const rooms    = useFacilityStore(s => s.rooms)
-  const authUser = useFacilityStore(s => s.authUser)
+  const rooms      = useFacilityStore(s => s.rooms)
+  const authUser   = useFacilityStore(s => s.authUser)
+  const tasks      = useFacilityStore(s => s.tasks)
+  const loadTasks  = useFacilityStore(s => s.loadTasks)
+  const addTask    = useFacilityStore(s => s.addTask)
+  const updateTask = useFacilityStore(s => s.updateTask)
+  const removeTask = useFacilityStore(s => s.deleteTask)
 
-  const [tasks, setTasks]       = useState([])
   const [loading, setLoading]   = useState(false)
   const [addOpen, setAddOpen]   = useState(false)
   const [form, setForm]         = useState({ title: '', description: '', roomId: '', assignedTo: '', priority: 'normal' })
   const [saving, setSaving]     = useState(false)
   const [error, setError]       = useState(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const data = await apiFetch('/api/tasks')
-      setTasks(data)
-    } catch (e) {
-      console.error('Failed to load tasks', e)
-    } finally {
-      setLoading(false)
+  useEffect(() => {
+    if (!open) return
+    if (tasks.length === 0) {
+      setLoading(true)
+      loadTasks().finally(() => setLoading(false))
     }
-  }, [])
-
-  useEffect(() => { if (open) load() }, [open, load])
+  }, [open])
 
   const cycleStatus = async (task) => {
     const next = NEXT_STATUS[task.status]
-    setTasks(ts => ts.map(t => t.id === task.id ? { ...t, status: next } : t))
+    updateTask(task.id, { status: next })
     try {
       await apiFetch(`/api/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) })
     } catch {
-      setTasks(ts => ts.map(t => t.id === task.id ? { ...t, status: task.status } : t))
+      updateTask(task.id, { status: task.status })
     }
   }
 
   const deleteTask = async (id) => {
-    setTasks(ts => ts.filter(t => t.id !== id))
+    removeTask(id)
     try {
       await apiFetch(`/api/tasks/${id}`, { method: 'DELETE' })
-    } catch { load() }
+    } catch { loadTasks() }
   }
 
   const handleAdd = async (e) => {
@@ -69,7 +67,7 @@ export default function WhiteboardPanel({ open, onClose }) {
           priority:    form.priority,
         }),
       })
-      setTasks(ts => [task, ...ts])
+      addTask(task)
       setForm({ title: '', description: '', roomId: '', assignedTo: '', priority: 'normal' })
       setAddOpen(false)
     } catch (err) {

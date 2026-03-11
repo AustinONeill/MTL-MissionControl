@@ -346,8 +346,9 @@ function SOPsTab({ symbols }) {
 
 // ── Main Drawer ────────────────────────────────────────────────────────────
 export default function RoomDrawer() {
-  const { selectedRoomId, drawerOpen, closeDrawer, getRoom, updateRoomStatus, updateRoomMode, transfers } = useFacilityStore()
+  const { selectedRoomId, drawerOpen, closeDrawer, getRoom, updateRoomStatus, updateRoomMode, transfers, tasks, updateTask, deleteTask } = useFacilityStore()
   const room = selectedRoomId ? getRoom(selectedRoomId) : null
+  const roomTasks = room ? tasks.filter(t => t.roomId === room.id && t.status !== 'done') : []
   const transferAsOrigin = room ? transfers[room.id] : null
   const transferAsDest   = room
     ? Object.entries(transfers).find(([, t]) => t.destinationId === room.id)
@@ -457,6 +458,37 @@ export default function RoomDrawer() {
                               <button className="flag-edit-btn" onClick={() => setNetOpen(true)}
                                 aria-label="Log net status">✏</button>
                             )}
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </section>
+                )}
+
+                {roomTasks.length > 0 && (
+                  <section className="drawer-section">
+                    <h3 className="section-title">OPEN TASKS</h3>
+                    <div className="room-tasks-list">
+                      {roomTasks.map(task => {
+                        const next = { todo: 'in_progress', in_progress: 'done' }[task.status]
+                        const statusColor = task.status === 'in_progress' ? '#f59e0b' : '#6b7280'
+                        const statusLabel = task.status === 'in_progress' ? 'IN PROGRESS' : 'TO DO'
+                        return (
+                          <div key={task.id} className="room-task-row">
+                            <span
+                              className="wb-priority-dot"
+                              style={{ background: { low: '#6b7280', normal: '#60a5fa', high: '#f87171' }[task.priority] ?? '#60a5fa', flexShrink: 0 }}
+                            />
+                            <span className="room-task-title">{task.title}</span>
+                            <button
+                              className="room-task-status"
+                              style={{ color: statusColor, borderColor: statusColor }}
+                              onClick={() => { updateTask(task.id, { status: next }); apiFetch(`/api/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) }).catch(() => updateTask(task.id, { status: task.status })) }}
+                              title="Advance status"
+                            >
+                              {statusLabel}
+                            </button>
+                            <button className="room-task-delete" onClick={() => { deleteTask(task.id); apiFetch(`/api/tasks/${task.id}`, { method: 'DELETE' }).catch(() => {}) }} aria-label="Delete">✕</button>
                           </div>
                         )
                       })}

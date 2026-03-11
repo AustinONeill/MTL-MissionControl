@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { apiFetch, getToken } from '../lib/apiFetch'
+import { useFacilityStore } from './facilityStore'
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL ?? ''
 
@@ -60,6 +61,10 @@ export const useChatStore = create((set, get) => ({
       method: 'POST',
       body:   JSON.stringify(payload),
     })
+    // If a task was created server-side, add it to the shared task store immediately
+    if (msg.createdTask) {
+      useFacilityStore.getState().addTask(msg.createdTask)
+    }
     // Optimistic local append — WS broadcast may also deliver the message,
     // so deduplicate by id to avoid showing it twice.
     set(s => {
@@ -116,6 +121,11 @@ export const useChatStore = create((set, get) => ({
             },
           }
         })
+
+        // Push created tasks to the shared whiteboard store (for all clients receiving via WS)
+        if (data.createdTask) {
+          useFacilityStore.getState().addTask(data.createdTask)
+        }
 
         // In-app banner when panel is closed (or different conv is active)
         if (!isActive) {

@@ -156,7 +156,7 @@ const LAYOUT = [
 
 // ─── Single isometric box tile ───────────────────────────────────────────────
 function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover, onDefolClick, onNetClick,
-                  isDragOver, onDragEnter, onDragLeave, onDrop, isPendingOrigin, isTransferDest, selectedFlagId }) {
+                  isDragOver, onDragEnter, onDragLeave, onDrop, isPendingOrigin, isTransferDest, selectedFlagId, taskCount }) {
   const { col, row, w, h } = room
   const s = (gx, gy) => ({ x: ox + iso(gx, gy).x, y: oy + iso(gx, gy).y })
 
@@ -414,6 +414,26 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
         onDrop={handleDrop}
       />
 
+      {/* Task count badge — top-right of top face */}
+      {room.interactive && taskCount > 0 && (
+        <g style={{ pointerEvents: 'none' }}>
+          <text
+            x={TR.x - (TR.x - TL.x) * 0.08}
+            y={TR.y + (BR.y - TR.y) * 0.12}
+            textAnchor="end"
+            dominantBaseline="middle"
+            fill="#fbbf24"
+            fontSize={6.5}
+            fontFamily="'JetBrains Mono', monospace"
+            fontWeight="700"
+            opacity={0.9}
+            style={{ userSelect: 'none' }}
+          >
+            📋{taskCount}
+          </text>
+        </g>
+      )}
+
       {/* Symbol overlay on top face */}
       {symbols.length > 0 && (
         <g>
@@ -453,6 +473,7 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
 // ─── Main isometric map component ───────────────────────────────────────────
 export default function IsometricMap() {
   const rooms                = useFacilityStore(s => s.rooms)
+  const tasks                = useFacilityStore(s => s.tasks)
   const selectRoom           = useFacilityStore(s => s.selectRoom)
   const selectedId           = useFacilityStore(s => s.selectedRoomId)
   const openDefolInfo        = useFacilityStore(s => s.openDefolInfo)
@@ -611,6 +632,7 @@ export default function IsometricMap() {
           const hasDefol = tile.symbols?.includes('defoliation')
           const hasNet   = tile.symbols?.includes('net')
           const isPendingOrigin = pendingTransferOrigin === tile.id
+          const taskCount = tasks.filter(t => t.roomId === tile.id && t.status !== 'done').length
           // Highlight eligible destinations while a transfer is pending
           const isTransferDest = !!pendingTransferOrigin
             && pendingTransferOrigin !== tile.id
@@ -657,6 +679,7 @@ export default function IsometricMap() {
               onDrop={handleDrop}
               onDefolClick={hasDefol ? () => openDefolInfo(tile.id) : undefined}
               onNetClick={hasNet ? () => openNetLog(tile.id) : undefined}
+              taskCount={taskCount}
             />
           )
         })}

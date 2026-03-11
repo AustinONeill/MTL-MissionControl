@@ -425,6 +425,53 @@ g[role="button"]:focus-visible {
   margin-bottom: 12px;
 }
 
+/* ── Room Tasks ───────────────────────────────────────────────── */
+.room-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.room-task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 6px 10px;
+}
+.room-task-title {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text);
+  font-weight: 500;
+  line-height: 1.4;
+}
+.room-task-status {
+  font-size: 8px;
+  letter-spacing: 1px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  background: transparent;
+  border: 1px solid;
+  border-radius: 3px;
+  padding: 2px 6px;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.room-task-status:hover { opacity: 0.7; }
+.room-task-delete {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  cursor: pointer;
+  font-size: 10px;
+  padding: 0 2px;
+  flex-shrink: 0;
+}
+.room-task-delete:hover { color: #f87171; }
+
 /* ── Flags ────────────────────────────────────────────────────── */
 .flags-grid {
   display: flex;

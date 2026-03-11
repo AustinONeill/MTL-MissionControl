@@ -92,11 +92,12 @@ chat.post('/conversations/:id/messages', async (c) => {
     replyToId:      body.replyToId,
   }).returning()
 
-  // Auto-create whiteboard task for structured action messages
+  // Auto-create whiteboard task and include it in the response + broadcast
+  let createdTask = null
   if (body.actionType === 'create_task' && body.actionPayload) {
     const p = body.actionPayload
-    const title = [p.taskLabel, p.subtask].filter(Boolean).join(' — ')
-    await db.insert(tasks).values({
+    const title = [p.taskLabel, p.subtask].filter(Boolean).join(' — ');
+    [createdTask] = await db.insert(tasks).values({
       title,
       description:   body.content,
       roomId:        p.roomId || undefined,
@@ -104,22 +105,22 @@ chat.post('/conversations/:id/messages', async (c) => {
       status:        'todo',
       createdBy:     user.userId,
       createdByName: user.name,
-    })
+    }).returning()
   }
 
-  // Broadcast to all WS clients in this conversation
+  // Broadcast to all WS clients — include createdTask so every client updates instantly
   try {
     const doId = c.env.CONVERSATION_DO.idFromName(id)
     const stub = c.env.CONVERSATION_DO.get(doId)
     await stub.fetch(new Request('http://do-internal/broadcast', {
       method: 'POST',
-      body:   JSON.stringify({ type: 'message', data: msg }),
+      body:   JSON.stringify({ type: 'message', data: { ...msg, createdTask } }),
     }))
   } catch (e) {
     console.warn('[chat] DO broadcast failed:', e)
   }
 
-  return c.json(msg, 201)
+  return c.json({ ...msg, createdTask }, 201)
 })
 
 // ── WebSocket upgrade route (mounted under /ws/chat, no authMiddleware) ─────

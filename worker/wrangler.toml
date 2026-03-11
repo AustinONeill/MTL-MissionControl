@@ -27,7 +27,7 @@ new_sqlite_classes = ["ConversationDO"]
 
 [[hyperdrive]]
 binding = "HYPERDRIVE"
-id = "387df7aa35364fb89321f86fa5c82bc5"
+id = "4a38f81e8daa43a7b4cdcacb985827f0"
 
 # Secrets are set via: wrangler secret put <NAME>
 # DATABASE_URL

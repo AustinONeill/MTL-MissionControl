@@ -12,15 +12,17 @@
   },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
+    "@types/pg": "^8.18.0",
     "aws4fetch": "^1.0.20",
     "drizzle-orm": "^0.41.0",
     "hono": "^4.7.7",
-    "jose": "^5.10.0"
+    "jose": "^5.10.0",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250309.0",
     "drizzle-kit": "^0.30.0",
     "typescript": "^5.8.2",
-    "wrangler": "^4.4.0"
+    "wrangler": "^4.72.0"
   }
 }

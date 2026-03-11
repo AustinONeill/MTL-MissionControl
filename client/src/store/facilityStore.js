@@ -86,13 +86,15 @@ async function apiFetch(path, options = {}) {
 // ── Map API room shape → local room shape ─────────────────────────────────
 function mapApiRoom(r) {
   const overlays = r.overlays ?? []
+  // Merge with initial room data so client-only fields (status, stage) are preserved
+  // when the API room row doesn't include them
+  const initial  = initialRooms.find(ir => ir.id === r.id) ?? {}
   return {
+    ...initial,
     ...r,
     overlays,
-    // Derive symbols from active overlays for backwards compat with map rendering
-    symbols: overlays
-      .filter(o => o.status === 'active')
-      .map(o => o.overlayType),
+    symbols: overlays.filter(o => o.status === 'active').map(o => o.overlayType),
+    status:  r.status ?? initial.status ?? STATUS.NORMAL,
   }
 }
 
@@ -105,6 +107,20 @@ export const useFacilityStore = create((set, get) => ({
 
   authUser: null,
   setAuthUser: (user) => set({ authUser: user }),
+
+  // ── Tasks (whiteboard + chat-created) ─────────────────────────────────────
+  tasks: [],
+  loadTasks: async () => {
+    try {
+      const data = await apiFetch('/api/tasks')
+      set({ tasks: data })
+    } catch (e) {
+      console.error('[facility] loadTasks failed:', e)
+    }
+  },
+  addTask:    (task) => set(s => ({ tasks: [task, ...s.tasks.filter(t => t.id !== task.id)] })),
+  updateTask: (id, patch) => set(s => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...patch } : t) })),
+  deleteTask: (id) => set(s => ({ tasks: s.tasks.filter(t => t.id !== id) })),
 
   // Mobile flag selection
   selectedFlagId: null,
