@@ -459,7 +459,6 @@ export default function IsometricMap() {
   const openNetLog           = useFacilityStore(s => s.openNetLog)
   const closeNetLog          = useFacilityStore(s => s.closeNetLog)
   const netLogRoomId         = useFacilityStore(s => s.netLogRoomId)
-  const loadRooms            = useFacilityStore(s => s.loadRooms)
   const connectRoomWs        = useFacilityStore(s => s.connectRoomWs)
   const selectedFlagId       = useFacilityStore(s => s.selectedFlagId)
   const clearSelectedFlag    = useFacilityStore(s => s.clearSelectedFlag)
@@ -470,11 +469,6 @@ export default function IsometricMap() {
   const startTransfer        = useFacilityStore(s => s.startTransfer)
   const completeTransfer     = useFacilityStore(s => s.completeTransfer)
   const cancelTransfer       = useFacilityStore(s => s.cancelTransfer)
-
-  // Load rooms from API on mount; connect WebSocket per room
-  useEffect(() => {
-    loadRooms()
-  }, [loadRooms])
 
   // Escape cancels a pending transfer
   useEffect(() => {

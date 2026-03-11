@@ -1,5 +1,5 @@
 import { createMiddleware } from 'hono/factory'
-import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { createLocalJWKSet, jwtVerify } from 'jose'
 import type { Env, HonoVariables, Role } from '../types'
 
 const ROLE_HIERARCHY: Record<Role, number> = {
@@ -14,6 +14,24 @@ export function hasRole(userRole: Role, requiredRole: Role): boolean {
   return ROLE_HIERARCHY[userRole] >= ROLE_HIERARCHY[requiredRole]
 }
 
+// Cache the JWKS in-memory for 10 minutes to avoid fetching on every request.
+// createRemoteJWKSet caused WebSocket upgrade errors in the CF Worker runtime;
+// fetching manually via fetch() + createLocalJWKSet is fully reliable.
+let _jwksCache: ReturnType<typeof createLocalJWKSet> | null = null
+let _jwksCacheExpiry = 0
+
+async function getJWKS(jwksUrl: string): Promise<ReturnType<typeof createLocalJWKSet>> {
+  if (_jwksCache && Date.now() < _jwksCacheExpiry) return _jwksCache
+
+  const res = await fetch(jwksUrl)
+  if (!res.ok) throw new Error(`JWKS fetch failed: HTTP ${res.status}`)
+  const jwks = await res.json() as { keys: object[] }
+
+  _jwksCache = createLocalJWKSet(jwks)
+  _jwksCacheExpiry = Date.now() + 10 * 60 * 1000  // 10 min
+  return _jwksCache
+}
+
 export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: HonoVariables }>(
   async (c, next) => {
     const authorization = c.req.header('Authorization')
@@ -24,8 +42,7 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: HonoV
     const token = authorization.slice(7)
 
     try {
-      const jwksUrl = new URL(c.env.STACK_AUTH_JWKS_URL)
-      const JWKS = createRemoteJWKSet(jwksUrl)
+      const JWKS = await getJWKS(c.env.STACK_AUTH_JWKS_URL)
 
       const { payload } = await jwtVerify(token, JWKS, {
         audience: c.env.STACK_AUTH_PROJECT_ID,
@@ -38,8 +55,11 @@ export const authMiddleware = createMiddleware<{ Bindings: Env; Variables: HonoV
 
       c.set('user', { userId, role, email, name })
       await next()
-    } catch {
-      return c.json({ error: 'Invalid or expired token', code: 401 }, 401)
+    } catch (err: unknown) {
+      const errName = (err as { name?: string })?.name ?? 'unknown'
+      const msg     = (err as { message?: string })?.message ?? String(err)
+      console.error('[auth] verification failed:', errName, msg)
+      return c.json({ error: 'Invalid or expired token', code: 401, reason: `${errName}: ${msg}` }, 401)
     }
   }
 )

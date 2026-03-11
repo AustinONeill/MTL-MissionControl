@@ -1,6 +1,6 @@
 import { Hono } from 'hono'
 import { eq, desc, and, isNull } from 'drizzle-orm'
-import { createRemoteJWKSet, jwtVerify } from 'jose'
+import { createLocalJWKSet, jwtVerify } from 'jose'
 import { getDb } from '../db'
 import { conversations, messages, rooms, tasks } from '../schema'
 import type { Env, HonoVariables } from '../types'
@@ -131,7 +131,8 @@ chatWs.get('/:id', async (c) => {
 
   if (!token) return c.json({ error: 'Missing token' }, 401)
   try {
-    const JWKS = createRemoteJWKSet(new URL(c.env.STACK_AUTH_JWKS_URL))
+    const jwksRes = await fetch(c.env.STACK_AUTH_JWKS_URL)
+    const JWKS = createLocalJWKSet(await jwksRes.json() as { keys: object[] })
     await jwtVerify(token, JWKS, { audience: c.env.STACK_AUTH_PROJECT_ID })
   } catch {
     return c.json({ error: 'Invalid or expired token' }, 401)

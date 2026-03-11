@@ -60,6 +60,13 @@ export const useChatStore = create((set, get) => ({
       method: 'POST',
       body:   JSON.stringify(payload),
     })
+    // Optimistic local append — WS broadcast may also deliver the message,
+    // so deduplicate by id to avoid showing it twice.
+    set(s => {
+      const existing = s.messages[convId] ?? []
+      if (existing.some(m => m.id === msg.id)) return s
+      return { messages: { ...s.messages, [convId]: [...existing, msg] } }
+    })
     return msg
   },
 
@@ -92,21 +99,23 @@ export const useChatStore = create((set, get) => ({
         const { activeConvId, conversations } = get()
         const isActive = activeConvId === data.conversationId
 
-        set(s => ({
-          messages: {
-            ...s.messages,
-            [data.conversationId]: [
-              ...(s.messages[data.conversationId] ?? []),
-              data,
-            ],
-          },
-          unread: {
-            ...s.unread,
-            [data.conversationId]: isActive
-              ? 0
-              : (s.unread[data.conversationId] ?? 0) + 1,
-          },
-        }))
+        set(s => {
+          const prev = s.messages[data.conversationId] ?? []
+          // Deduplicate: optimistic sendMessage may have already appended this
+          if (prev.some(m => m.id === data.id)) return s
+          return {
+            messages: {
+              ...s.messages,
+              [data.conversationId]: [...prev, data],
+            },
+            unread: {
+              ...s.unread,
+              [data.conversationId]: isActive
+                ? 0
+                : (s.unread[data.conversationId] ?? 0) + 1,
+            },
+          }
+        })
 
         // In-app banner when panel is closed (or different conv is active)
         if (!isActive) {

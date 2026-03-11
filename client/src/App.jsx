@@ -16,6 +16,7 @@ export default function App() {
   const stackApp        = useStackApp()
   const user            = useUser({ or: 'return-null' })
   const setAuthUser     = useFacilityStore(s => s.setAuthUser)
+  const loadRooms       = useFacilityStore(s => s.loadRooms)
   const drawerOpen      = useFacilityStore(s => s.drawerOpen)
   const selectedFlagId  = useFacilityStore(s => s.selectedFlagId)
   const selectFlag      = useFacilityStore(s => s.selectFlag)
@@ -58,6 +59,8 @@ export default function App() {
         if (accessToken) {
           setAuthToken(accessToken)
           localStorage.setItem('stack-auth-token', accessToken)
+          // Load rooms only after token is primed — avoids race condition
+          loadRooms()
         }
       }).catch((e) => console.error('[MTL] getAuthJson failed:', e))
 

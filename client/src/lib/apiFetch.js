@@ -33,7 +33,19 @@ export async function getToken() {
   }
 
   const lsToken = localStorage.getItem('stack-auth-token')
-  if (!lsToken) console.warn('[apiFetch] no token in localStorage — request will be unauthenticated')
+  if (!lsToken) {
+    console.warn('[apiFetch] no token available — request will be unauthenticated')
+    return null
+  }
+  // Decode JWT payload to check expiry before using stale localStorage token
+  try {
+    const payload = JSON.parse(atob(lsToken.split('.')[1]))
+    if (payload.exp && payload.exp * 1000 < Date.now()) {
+      console.warn('[apiFetch] localStorage token is expired, discarding')
+      localStorage.removeItem('stack-auth-token')
+      return null
+    }
+  } catch { /* unparseable token — discard */ }
   return lsToken
 }
 
@@ -54,7 +66,14 @@ export async function apiFetch(path, options = {}) {
   const method = options.method ?? 'GET'
   const token  = await getToken()
 
-  if (!token) console.warn(`[apiFetch] ${method} ${path} — no auth token, expect 401`)
+  if (!token) {
+    console.warn(`[apiFetch] ${method} ${path} — no auth token, expect 401`)
+  } else {
+    try {
+      const p = JSON.parse(atob(token.split('.')[1]))
+      console.debug(`[apiFetch] token aud=${JSON.stringify(p.aud)} exp=${new Date(p.exp*1000).toISOString()} expired=${p.exp*1000 < Date.now()}`)
+    } catch { /* ignore */ }
+  }
 
   let res
   try {
@@ -73,9 +92,12 @@ export async function apiFetch(path, options = {}) {
 
   if (!res.ok) {
     if (res.status === 401) {
-      console.warn(`[apiFetch] 401 on ${method} ${path} — busting token cache`)
+      const errBody = await res.json().catch(() => ({}))
+      console.warn(`[apiFetch] 401 on ${method} ${path} — reason: ${errBody.reason ?? 'unknown'} — busting cache`)
       _cachedToken = null
       _cacheExpiry = 0
+      localStorage.removeItem('stack-auth-token')
+      throw new Error(errBody.error ?? 'HTTP 401')
     } else {
       console.error(`[apiFetch] ${method} ${path} → HTTP ${res.status}`)
     }
