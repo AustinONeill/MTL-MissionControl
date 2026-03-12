@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useUser, useStackApp } from '@stackframe/stack'
 import gardenopsLogo from './assets/gardenops-logo.png'
 import IsometricMap from './components/IsometricMap'
@@ -34,6 +34,22 @@ export default function App() {
     () => sessionStorage.getItem('mtl-section') === 'map' ? 'map' : 'hub'
   )
   const totalUnread = useChatStore(s => Object.values(s.unread).reduce((a, b) => a + b, 0))
+
+  // ── Theme system ─────────────────────────────────────────────
+  const [theme, setTheme] = useState(() => localStorage.getItem('mtl-theme') || 'night-mode')
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+    localStorage.setItem('mtl-theme', theme)
+  }, [theme])
+
+  // ── Map view mode (lifted so mobile sheet can toggle it too) ──
+  const [mapView, setMapView] = useState(() => localStorage.getItem('mapViewPreference') || '2D')
+  const toggleMapView = () => {
+    const next = mapView === '2D' ? '3D' : '2D'
+    setMapView(next)
+    localStorage.setItem('mapViewPreference', next)
+    window.dispatchEvent(new CustomEvent('mapViewChange', { detail: { mode: next } }))
+  }
 
   useEffect(() => {
     if (stackInitError) {
@@ -157,7 +173,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Header user={user} onWhiteboardOpen={() => setWhiteboardOpen(true)} onChatOpen={() => setChatOpen(true)} chatUnread={totalUnread} onGoToHub={handleGoToHub} />
+      <Header user={user} onWhiteboardOpen={() => setWhiteboardOpen(true)} onChatOpen={() => setChatOpen(true)} chatUnread={totalUnread} onGoToHub={handleGoToHub} theme={theme} onThemeChange={setTheme} mapView={mapView} onToggleView={toggleMapView} />
       {stackInitError && (
         <div className="auth-warning">Auth disabled: {stackInitError}</div>
       )}
@@ -165,7 +181,7 @@ export default function App() {
       <main className="map-view">
         <IsometricMap />
       </main>
-      <LegendPanel />
+      <LegendPanel onOpenBoard={() => setWhiteboardOpen(true)} onOpenMessages={() => setChatOpen(true)} />
       <RoomDrawer />
       <WhiteboardPanel open={whiteboardOpen} onClose={() => setWhiteboardOpen(false)} />
       <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
@@ -194,8 +210,57 @@ export default function App() {
       <div className={`mobile-toolbox-sheet${toolboxOpen ? ' open' : ''}`}>
         <div className="mobile-toolbox-sheet-handle" />
         <p className="mobile-toolbox-title">
-          {selectedFlagId ? 'TAP A ROOM TO PLACE' : 'SELECT OVERLAY'}
+          {selectedFlagId ? 'TAP A ROOM TO PLACE' : 'TOOLBOX'}
         </p>
+
+        {/* ── Quick Access row (hidden while placing an overlay) ── */}
+        {!selectedFlagId && (
+          <>
+            <p className="mobile-sheet-section-label">QUICK ACCESS</p>
+            <div className="mobile-quick-row">
+              <button
+                className="mobile-quick-btn"
+                onClick={() => { setWhiteboardOpen(true); setToolboxOpen(false) }}
+                aria-label="Open task board"
+              >
+                <span className="mobile-quick-icon">📋</span>
+                <span className="mobile-quick-label">BOARD</span>
+              </button>
+              <button
+                className="mobile-quick-btn"
+                onClick={() => { setChatOpen(true); setToolboxOpen(false) }}
+                aria-label="Open team chat"
+              >
+                <span className="mobile-quick-icon">💬</span>
+                <span className="mobile-quick-label">MESSAGES</span>
+                {totalUnread > 0 && (
+                  <span className="mobile-quick-badge">{totalUnread > 9 ? '9+' : totalUnread}</span>
+                )}
+              </button>
+              <button
+                className={`mobile-quick-btn${mapView === '3D' ? ' mobile-quick-btn--active' : ''}`}
+                onClick={() => { toggleMapView(); setToolboxOpen(false) }}
+                aria-label={`Switch to ${mapView === '2D' ? '3D' : '2D'} map view`}
+              >
+                <span className="mobile-quick-icon mobile-quick-view">{mapView}</span>
+                <span className="mobile-quick-label">MAP VIEW</span>
+              </button>
+              <button
+                className="mobile-quick-btn"
+                onClick={() => {
+                  const themes = ['night-mode', 'gas-n-up', 'frostd-flakes', 'bright-mode']
+                  setTheme(themes[(themes.indexOf(theme) + 1) % themes.length])
+                }}
+                aria-label="Cycle to next theme"
+              >
+                <span className="mobile-quick-icon">◐</span>
+                <span className="mobile-quick-label">THEME</span>
+              </button>
+            </div>
+            <p className="mobile-sheet-section-label">OVERLAYS</p>
+          </>
+        )}
+
         <div className="mobile-toolbox-grid">
           {SYMBOL_ITEMS.map(item => (
             <button
@@ -231,18 +296,48 @@ function WelcomeBanner({ name, onDismiss }) {
   )
 }
 
-function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread, onGoToHub }) {
-  const stackApp = useStackApp()
+const THEMES = [
+  { id: 'night-mode',    label: 'Night Mode',     dot: '#4ade80' },
+  { id: 'gas-n-up',      label: 'Gas-N-Up',       dot: '#f97316' },
+  { id: 'frostd-flakes', label: "Frost'd Flakes", dot: '#0ea5e9' },
+  { id: 'bright-mode',   label: 'Bright Mode',    dot: '#16a34a' },
+]
+
+function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread, onGoToHub, theme, onThemeChange, mapView, onToggleView }) {
+  const stackApp   = useStackApp()
+  const rooms      = useFacilityStore(s => s.rooms)
+  const selectRoom = useFacilityStore(s => s.selectRoom)
+
   const onlineStatus = localStorage.getItem('mtl-online-status') || 'auto'
-  const statusClass = {
-    auto:   'online',
-    online: 'online',
-    away:   'away',
-    dnd:    'dnd',
-  }[onlineStatus] ?? 'online'
+  const statusClass  = { auto: 'online', online: 'online', away: 'away', dnd: 'dnd' }[onlineStatus] ?? 'online'
+
+  const [searchOpen,  setSearchOpen]  = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [themeOpen,   setThemeOpen]   = useState(false)
+  const [avatarOpen,  setAvatarOpen]  = useState(false)
+
+  const searchRef = useRef(null)
+
+  const filteredRooms = searchQuery.trim().length > 1
+    ? rooms.filter(r => r.name.toLowerCase().includes(searchQuery.toLowerCase())).slice(0, 6)
+    : []
+
+  const userInitial = (user?.displayName ?? user?.primaryEmail ?? 'U').charAt(0).toUpperCase()
+
+  // Close dropdowns when clicking outside their containers
+  useEffect(() => {
+    const handler = (e) => {
+      if (!e.target.closest('.topbar-theme-wrap'))  setThemeOpen(false)
+      if (!e.target.closest('.topbar-avatar-wrap')) setAvatarOpen(false)
+      if (!e.target.closest('.topbar-search-wrap')) { setSearchOpen(false); setSearchQuery('') }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
   return (
     <header className="topbar">
+      {/* ── Left: brand ───────────────────────────────────── */}
       <div className="topbar-left">
         <button
           className="topbar-home-btn"
@@ -250,28 +345,138 @@ function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread, onGoToHub }) {
           aria-label="Return to Mission Control hub"
           title="Hub"
         >
-          <img src={gardenopsLogo} alt="GardenOps" className="topbar-logo-img" />
+          <img src={gardenopsLogo} alt="GardenOps" className="topbar-logo-img topbar-logo-ring" />
         </button>
         <span className="topbar-wordmark">GARDENOPS</span>
         <span className="topbar-divider" />
         <span className="topbar-facility">MTL CANNABIS</span>
+        <span className="topbar-tagline">Cultivate with Confidence</span>
       </div>
+
+      {/* ── Center: search + controls ─────────────────────── */}
       <div className="topbar-center">
-        <span className="topbar-breadcrumb">ISOMETRIC FACILITY MAP</span>
-      </div>
-      <div className="topbar-right">
-        {user ? (
-          <>
-            <span className="topbar-user" title={user.primaryEmail ?? ''}>
-              {user.displayName ?? user.primaryEmail ?? 'Signed in'}
-            </span>
+        {/* Quick room search */}
+        <div className={`topbar-search-wrap${searchOpen ? ' open' : ''}`}>
+          {searchOpen ? (
+            <input
+              ref={searchRef}
+              className="topbar-search-input"
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              placeholder="Room name or area…"
+              autoComplete="off"
+              aria-label="Search rooms and areas"
+            />
+          ) : (
             <button
-              className="topbar-auth-btn"
-              onClick={() => stackApp.signOut()}
+              className="topbar-search-trigger"
+              onClick={() => { setSearchOpen(true); setTimeout(() => searchRef.current?.focus(), 40) }}
+              aria-label="Search rooms and areas"
             >
-              Sign out
+              <span className="topbar-search-icon">⌕</span>
+              <span className="topbar-search-placeholder">Search rooms…</span>
             </button>
-          </>
+          )}
+          {filteredRooms.length > 0 && (
+            <div className="topbar-search-results" role="listbox">
+              {filteredRooms.map(r => (
+                <button
+                  key={r.id}
+                  className="topbar-search-result"
+                  role="option"
+                  onClick={() => { selectRoom(r.id); setSearchOpen(false); setSearchQuery('') }}
+                >
+                  <span className="tsr-type">{(r.type ?? 'ROOM').toUpperCase()}</span>
+                  <span className="tsr-name">{r.name}</span>
+                  <span className={`tsr-mode tsr-mode--${r.mode}`}>{r.mode}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 2D / 3D map view toggle */}
+        <button
+          className={`topbar-view-toggle${mapView === '3D' ? ' active' : ''}`}
+          onClick={onToggleView}
+          aria-label={`Switch to ${mapView === '2D' ? '3D' : '2D'} view`}
+          title={`Map view: ${mapView} — click to toggle`}
+        >
+          <span className="tvt-label" style={{ color: mapView === '2D' ? 'var(--accent)' : 'var(--text-dim)' }}>2D</span>
+          <span className="tvt-sep">/</span>
+          <span className="tvt-label" style={{ color: mapView === '3D' ? 'var(--accent)' : 'var(--text-dim)' }}>3D</span>
+        </button>
+
+        {/* Theme switcher */}
+        <div className="topbar-theme-wrap">
+          <button
+            className={`topbar-icon-action${themeOpen ? ' active' : ''}`}
+            onClick={() => setThemeOpen(o => !o)}
+            aria-label="Change interface theme"
+            title="Switch theme"
+          >
+            ◐
+          </button>
+          {themeOpen && (
+            <div className="topbar-dropdown topbar-theme-menu" role="menu">
+              {THEMES.map(t => (
+                <button
+                  key={t.id}
+                  className={`topbar-dropdown-item${theme === t.id ? ' selected' : ''}`}
+                  role="menuitem"
+                  onClick={() => { onThemeChange(t.id); setThemeOpen(false) }}
+                >
+                  <span className="theme-dot" style={{ background: t.dot }} />
+                  {t.label}
+                  {theme === t.id && <span className="theme-check">✓</span>}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Right: status + actions + avatar ─────────────── */}
+      <div className="topbar-right">
+        <span className={`topbar-status-indicator ${statusClass}`} title={`Status: ${onlineStatus}`} />
+        <span className="topbar-status-text">LIVE</span>
+        <span className="topbar-time" id="clock" />
+
+        <button className="topbar-wb-btn"   onClick={onWhiteboardOpen} aria-label="Open task board">BOARD</button>
+        <button className="topbar-chat-btn" onClick={onChatOpen}       aria-label="Open team chat">
+          💬{chatUnread > 0 && <span className="topbar-chat-badge">{chatUnread > 99 ? '99+' : chatUnread}</span>}
+        </button>
+
+        {user ? (
+          <div className="topbar-avatar-wrap">
+            <button
+              className="topbar-avatar-btn"
+              onClick={() => setAvatarOpen(o => !o)}
+              aria-label="Open user menu"
+              title={user.primaryEmail ?? ''}
+            >
+              <span className="topbar-avatar-initial">{userInitial}</span>
+            </button>
+            {avatarOpen && (
+              <div className="topbar-dropdown topbar-avatar-menu" role="menu">
+                <div className="topbar-dropdown-header">
+                  <span className="tada-name">{user.displayName ?? 'User'}</span>
+                  <span className="tada-email">{user.primaryEmail ?? ''}</span>
+                </div>
+                <div className="topbar-dropdown-divider" />
+                <button className="topbar-dropdown-item" role="menuitem" onClick={() => setAvatarOpen(false)}>Profile</button>
+                <button className="topbar-dropdown-item" role="menuitem" onClick={() => setAvatarOpen(false)}>Settings</button>
+                <div className="topbar-dropdown-divider" />
+                <button
+                  className="topbar-dropdown-item topbar-dropdown-item--danger"
+                  role="menuitem"
+                  onClick={() => { setAvatarOpen(false); stackApp.signOut() }}
+                >
+                  Sign out
+                </button>
+              </div>
+            )}
+          </div>
         ) : (
           <button
             className="topbar-auth-btn topbar-auth-btn--signin"
@@ -281,15 +486,6 @@ function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread, onGoToHub }) {
             Sign in with Microsoft
           </button>
         )}
-        <button className="topbar-wb-btn" onClick={onWhiteboardOpen} aria-label="Open whiteboard">
-          BOARD
-        </button>
-        <button className="topbar-chat-btn" onClick={onChatOpen} aria-label="Open chat">
-          💬{chatUnread > 0 && <span className="topbar-chat-badge">{chatUnread > 99 ? '99+' : chatUnread}</span>}
-        </button>
-        <span className={`topbar-status-indicator ${statusClass}`} title={`Status: ${onlineStatus}`} />
-        <span className="topbar-status-text">LIVE</span>
-        <span className="topbar-time" id="clock" />
       </div>
     </header>
   )

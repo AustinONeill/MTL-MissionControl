@@ -12,6 +12,10 @@ const TW = 88   // tile width  (screen px per grid unit)
 const TH = 44   // tile height = TW / 2
 const TD = 22   // wall depth  = TH / 2
 
+// ─── Flat 2D mode constants ─────────────────────────────────────────────────
+const FLAT_S   = 36   // pixels per grid unit in flat top-down mode
+const FLAT_PAD = 32
+
 // Convert grid (gx, gy) → screen (sx, sy) relative to origin
 const iso = (gx, gy) => ({
   x: (gx - gy) * TW / 2,
@@ -21,38 +25,99 @@ const iso = (gx, gy) => ({
 // Build a polygon points string from an array of {x,y}
 const pts = (arr) => arr.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
 
-// ─── Status → 3 face colors (top / left-front / right-front) ────────────────
-const faceColors = (type, status) => {
-  if (type === 'wing') return {
-    top: '#131320', left: '#0d0d1a', right: '#0a0a14',
-    stroke: '#1e1e30', label: '#3a3a55',
-  }
-  if (type === 'corridor') return {
-    top: '#0f0f1a', left: '#0a0a14', right: '#080810',
-    stroke: '#1a1a28', label: '#2a2a3a',
-  }
-  if (type === 'utility') return {
-    top: '#181828', left: '#101020', right: '#0d0d18',
-    stroke: '#252535', label: '#4a4a6a',
-  }
-  if (type === 'support') return {
-    top: '#1a1f35', left: '#121628', right: '#0e1220',
-    stroke: '#252d50', label: '#5a6490',
-  }
+// ─── Theme-aware map color palettes ─────────────────────────────────────────
+const MAP_PALETTES = {
+  'night-mode': {
+    bg: '#080810', grid: '#111120', sectionLabel: '#2d5c3a', corrLabel: '#1a1a30',
+    veg: {
+      normal: { top: '#163a28', left: '#0e2b1d', right: '#0b2217', stroke: '#235e40', label: '#4ade80' },
+      warn:   { top: '#1f2e10', left: '#162209', right: '#101a06', stroke: '#3a5818', label: '#86cf36' },
+      alert:  { top: '#2d1010', left: '#220d0d', right: '#1a0a0a', stroke: '#6b2020', label: '#f87171' },
+    },
+    flower: {
+      normal: { top: '#0e2e1e', left: '#092318', right: '#071b12', stroke: '#154d32', label: '#4ade80' },
+      warn:   { top: '#2a2800', left: '#1e1d00', right: '#161500', stroke: '#6b6200', label: '#facc15' },
+      alert:  { top: '#330f0f', left: '#260b0b', right: '#1d0909', stroke: '#7a1a1a', label: '#f87171' },
+      idle:   { top: '#14141f', left: '#0e0e17', right: '#0b0b12', stroke: '#202030', label: '#4a4a68' },
+    },
+    wing:     { top: '#131320', left: '#0d0d1a', right: '#0a0a14', stroke: '#1e1e30', label: '#3a3a55' },
+    corridor: { top: '#0f0f1a', left: '#0a0a14', right: '#080810', stroke: '#1a1a28', label: '#2a2a3a' },
+    utility:  { top: '#181828', left: '#101020', right: '#0d0d18', stroke: '#252535', label: '#4a4a6a' },
+    support:  { top: '#1a1f35', left: '#121628', right: '#0e1220', stroke: '#252d50', label: '#5a6490' },
+  },
+  'gas-n-up': {
+    bg: '#080d08', grid: '#111a11', sectionLabel: '#3a5818', corrLabel: '#1a2212',
+    veg: {
+      normal: { top: '#132e10', left: '#0b2208', right: '#091a06', stroke: '#204d18', label: '#f97316' },
+      warn:   { top: '#1f2e10', left: '#162209', right: '#101a06', stroke: '#3a5818', label: '#f97316' },
+      alert:  { top: '#2d1520', left: '#22100a', right: '#1a0c14', stroke: '#6b2048', label: '#7b2cbf' },
+    },
+    flower: {
+      normal: { top: '#0c280e', left: '#081e0a', right: '#061608', stroke: '#124418', label: '#f97316' },
+      warn:   { top: '#2a2200', left: '#1e1800', right: '#161200', stroke: '#6b5400', label: '#f97316' },
+      alert:  { top: '#30102a', left: '#240c20', right: '#1c0918', stroke: '#6b1a58', label: '#7b2cbf' },
+      idle:   { top: '#12120e', left: '#0e0e0a', right: '#0b0b08', stroke: '#1e1e18', label: '#4a4a38' },
+    },
+    wing:     { top: '#0f130a', left: '#0a0e07', right: '#080c05', stroke: '#1a2212', label: '#2a380a' },
+    corridor: { top: '#0d1209', left: '#090e06', right: '#070c04', stroke: '#181e10', label: '#222a10' },
+    utility:  { top: '#151c0c', left: '#0e1308', right: '#0b1006', stroke: '#222e12', label: '#3a4818' },
+    support:  { top: '#1c1428', left: '#14101e', right: '#100c18', stroke: '#2a1e40', label: '#7b2cbf' },
+  },
+  'frostd-flakes': {
+    bg: '#edf7f0', grid: '#cce4d2', sectionLabel: '#2e7d32', corrLabel: '#4a7056',
+    veg: {
+      normal: { top: '#c8e6c9', left: '#a5d6a7', right: '#81c784', stroke: '#4caf50', label: '#1b5e20' },
+      warn:   { top: '#fff9c4', left: '#fff59d', right: '#fff176', stroke: '#f9a825', label: '#e65100' },
+      alert:  { top: '#ffcdd2', left: '#ef9a9a', right: '#e57373', stroke: '#c62828', label: '#b71c1c' },
+    },
+    flower: {
+      normal: { top: '#dcedc8', left: '#c5e1a5', right: '#aed581', stroke: '#7cb342', label: '#1b5e20' },
+      warn:   { top: '#fff9c4', left: '#fff59d', right: '#fff176', stroke: '#f9a825', label: '#e65100' },
+      alert:  { top: '#ffcdd2', left: '#ef9a9a', right: '#e57373', stroke: '#c62828', label: '#b71c1c' },
+      idle:   { top: '#f5f5f5', left: '#e0e0e0', right: '#bdbdbd', stroke: '#9e9e9e', label: '#616161' },
+    },
+    wing:     { top: '#e8f5e9', left: '#dcedc8', right: '#c8e6c9', stroke: '#a5d6a7', label: '#4a7056' },
+    corridor: { top: '#f1f8e9', left: '#e8f5e9', right: '#dcedc8', stroke: '#aed581', label: '#5a7a46' },
+    utility:  { top: '#e3f2fd', left: '#bbdefb', right: '#90caf9', stroke: '#42a5f5', label: '#1565c0' },
+    support:  { top: '#e8eaf6', left: '#c5cae9', right: '#9fa8da', stroke: '#3f51b5', label: '#283593' },
+  },
+  'bright-mode': {
+    bg: '#f7faf7', grid: '#d0e8d4', sectionLabel: '#2e7d32', corrLabel: '#4a7056',
+    veg: {
+      normal: { top: '#c8e6c9', left: '#a5d6a7', right: '#81c784', stroke: '#43a047', label: '#1b5e20' },
+      warn:   { top: '#fff9c4', left: '#fff59d', right: '#fff176', stroke: '#f9a825', label: '#e65100' },
+      alert:  { top: '#ffcdd2', left: '#ef9a9a', right: '#e57373', stroke: '#c62828', label: '#b71c1c' },
+    },
+    flower: {
+      normal: { top: '#b2dfdb', left: '#80cbc4', right: '#4db6ac', stroke: '#00897b', label: '#004d40' },
+      warn:   { top: '#fff9c4', left: '#fff59d', right: '#fff176', stroke: '#f9a825', label: '#e65100' },
+      alert:  { top: '#ffcdd2', left: '#ef9a9a', right: '#e57373', stroke: '#c62828', label: '#b71c1c' },
+      idle:   { top: '#f5f5f5', left: '#eeeeee', right: '#e0e0e0', stroke: '#9e9e9e', label: '#757575' },
+    },
+    wing:     { top: '#f5f5f5', left: '#eeeeee', right: '#e0e0e0', stroke: '#bdbdbd', label: '#9e9e9e' },
+    corridor: { top: '#fafafa', left: '#f5f5f5', right: '#eeeeee', stroke: '#e0e0e0', label: '#bdbdbd' },
+    utility:  { top: '#e3f2fd', left: '#bbdefb', right: '#90caf9', stroke: '#64b5f6', label: '#1976d2' },
+    support:  { top: '#f3e5f5', left: '#e1bee7', right: '#ce93d8', stroke: '#ab47bc', label: '#4a148c' },
+  },
+}
+
+// ─── Status → 3 face colors using active theme palette ──────────────────────
+const faceColors = (type, status, theme = 'night-mode') => {
+  const p = MAP_PALETTES[theme] || MAP_PALETTES['night-mode']
+  if (type === 'wing')     return p.wing
+  if (type === 'corridor') return p.corridor
+  if (type === 'utility')  return p.utility
+  if (type === 'support')  return p.support
   if (type === 'veg') {
-    switch (status) {
-      case STATUS.WARN:  return { top: '#1f2e10', left: '#162209', right: '#101a06', stroke: '#3a5818', label: '#86cf36' }
-      case STATUS.ALERT: return { top: '#2d1010', left: '#220d0d', right: '#1a0a0a', stroke: '#6b2020', label: '#f87171' }
-      default:           return { top: '#163a28', left: '#0e2b1d', right: '#0b2217', stroke: '#235e40', label: '#4ade80' }
-    }
+    if (status === STATUS.WARN)  return p.veg.warn
+    if (status === STATUS.ALERT) return p.veg.alert
+    return p.veg.normal
   }
   // flower
-  switch (status) {
-    case STATUS.WARN:  return { top: '#2a2800', left: '#1e1d00', right: '#161500', stroke: '#6b6200', label: '#facc15' }
-    case STATUS.ALERT: return { top: '#330f0f', left: '#260b0b', right: '#1d0909', stroke: '#7a1a1a', label: '#f87171' }
-    case STATUS.IDLE:  return { top: '#14141f', left: '#0e0e17', right: '#0b0b12', stroke: '#202030', label: '#4a4a68' }
-    default:           return { top: '#0e2e1e', left: '#092318', right: '#071b12', stroke: '#154d32', label: '#4ade80' }
-  }
+  if (status === STATUS.WARN)  return p.flower.warn
+  if (status === STATUS.ALERT) return p.flower.alert
+  if (status === STATUS.IDLE)  return p.flower.idle
+  return p.flower.normal
 }
 
 // ─── Symbol overlay definitions ─────────────────────────────────────────────
@@ -470,8 +535,120 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
   )
 }
 
+// ─── Flat 2D tile renderer ───────────────────────────────────────────────────
+function FlatBox({ room, flatOx, flatOy, colors, onClick, isSelected, isHovered, onHover,
+                   isDragOver, onDragEnter, onDragLeave, onDrop, selectedFlagId, taskCount }) {
+  const x  = flatOx + room.col * FLAT_S
+  const y  = flatOy + room.row * FLAT_S
+  const rw = room.w  * FLAT_S
+  const rh = room.h  * FLAT_S
+  const cx = x + rw / 2
+  const cy = y + rh / 2
+  const symbols = (room.symbols || []).slice(0, 4)
+
+  const handleDragOver  = (e) => { if (!room.interactive) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; onDragEnter?.(room.id) }
+  const handleDragLeave = ()  => onDragLeave?.()
+  const handleDrop      = (e) => {
+    if (!room.interactive) return
+    e.preventDefault(); e.stopPropagation()
+    const key = e.dataTransfer.getData('application/gardenops-symbol') || e.dataTransfer.getData('text/plain')
+    if (key) onDrop?.(room.id, key)
+  }
+
+  return (
+    <g
+      role={room.interactive ? 'button' : undefined}
+      tabIndex={room.interactive ? 0 : undefined}
+      aria-label={room.interactive ? `${room.name} – click to open` : undefined}
+      onClick={room.interactive ? onClick : undefined}
+      onMouseEnter={() => onHover?.(room.id)}
+      onMouseLeave={() => onHover?.(null)}
+      style={{ cursor: room.interactive ? 'pointer' : 'default', outline: 'none' }}
+    >
+      <rect x={x} y={y} width={rw} height={rh} fill={colors.top} stroke={colors.stroke} strokeWidth={0.8} rx={1} />
+
+      {(isSelected || isHovered) && (
+        <rect x={x - 1} y={y - 1} width={rw + 2} height={rh + 2}
+          fill={colors.label} fillOpacity={isSelected ? 0.08 : 0.03}
+          stroke={colors.label} strokeWidth={isSelected ? 1.5 : 0.75}
+          strokeOpacity={isSelected ? 0.9 : 0.4} rx={1}
+          style={{ pointerEvents: 'none' }} />
+      )}
+      {isDragOver && room.interactive && (
+        <rect x={x} y={y} width={rw} height={rh}
+          fill="#60a5fa" fillOpacity={0.15} stroke="#60a5fa" strokeWidth={1.5} strokeDasharray="5 3" rx={1}
+          style={{ pointerEvents: 'none' }} />
+      )}
+      {selectedFlagId && selectedFlagId !== 'transfer' && room.interactive && (
+        <rect x={x} y={y} width={rw} height={rh}
+          fill="none" stroke="#f59e0b" strokeWidth={1.5} strokeDasharray="5 3" rx={1}
+          style={{ pointerEvents: 'none' }} />
+      )}
+
+      {room.interactive && (
+        <text x={cx} y={cy - (symbols.length > 0 ? 5 : 0)}
+          textAnchor="middle" dominantBaseline="middle"
+          fill={colors.label} fontSize={room.type === 'flower' ? 7.5 : 6.5}
+          fontFamily="'JetBrains Mono', monospace" fontWeight="700" letterSpacing="0.5"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}>
+          {room.name}
+        </text>
+      )}
+      {symbols.length > 0 && (
+        <text x={cx} y={cy + (room.interactive ? 7 : 0)}
+          textAnchor="middle" dominantBaseline="middle"
+          fontSize={7} fontFamily="'Segoe UI Emoji', 'Apple Color Emoji', sans-serif"
+          style={{ pointerEvents: 'none', userSelect: 'none' }}>
+          {symbols.map(s => SYMBOL_GLYPHS[s] || '?').join(' ')}
+        </text>
+      )}
+      {taskCount > 0 && (
+        <text x={x + rw - 2} y={y + 7} textAnchor="end" dominantBaseline="middle"
+          fill="#fbbf24" fontSize={6} fontFamily="'JetBrains Mono', monospace"
+          fontWeight="700" opacity={0.9} style={{ pointerEvents: 'none', userSelect: 'none' }}>
+          📋{taskCount}
+        </text>
+      )}
+
+      {/* Transparent drag hit area */}
+      <rect x={x} y={y} width={rw} height={rh} fill="transparent" stroke="none"
+        style={{ pointerEvents: room.interactive ? 'all' : 'none' }}
+        onDragOver={handleDragOver} onDragLeave={handleDragLeave} onDrop={handleDrop} />
+    </g>
+  )
+}
+
+// ─── Hook: reactive map theme (watches data-theme on <html>) ─────────────────
+function useMapTheme() {
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || 'night-mode')
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setTheme(document.documentElement.dataset.theme || 'night-mode')
+    })
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+  return theme
+}
+
+// ─── Hook: 2D/3D view mode (localStorage + custom event bus) ─────────────────
+function useMapViewMode() {
+  const [mode, setMode] = useState(() => localStorage.getItem('mapViewPreference') || '2D')
+  useEffect(() => {
+    const handler = (e) => setMode(e.detail?.mode || '2D')
+    window.addEventListener('mapViewChange', handler)
+    return () => window.removeEventListener('mapViewChange', handler)
+  }, [])
+  return mode
+}
+
 // ─── Main isometric map component ───────────────────────────────────────────
 export default function IsometricMap() {
+  const mapTheme   = useMapTheme()
+  const viewMode   = useMapViewMode()
+  const mapPalette = MAP_PALETTES[mapTheme] || MAP_PALETTES['night-mode']
+  const isFlat     = viewMode === '2D'
+
   const rooms                = useFacilityStore(s => s.rooms)
   const tasks                = useFacilityStore(s => s.tasks)
   const selectRoom           = useFacilityStore(s => s.selectRoom)
@@ -566,6 +743,22 @@ export default function IsometricMap() {
   const svgW = maxX - minX + PAD * 2
   const svgH = maxY - minY + TD + PAD * 2
 
+  // Flat 2D mode bounds — derived from LAYOUT statically
+  const { flatMinCol, flatMaxCol, flatMaxRow } = useMemo(() => {
+    return LAYOUT.reduce((b, r) => ({
+      flatMinCol: Math.min(b.flatMinCol, r.col),
+      flatMaxCol: Math.max(b.flatMaxCol, r.col + r.w),
+      flatMaxRow: Math.max(b.flatMaxRow, r.row + r.h),
+    }), { flatMinCol: Infinity, flatMaxCol: -Infinity, flatMaxRow: -Infinity })
+  }, [])
+  const flatOx    = -flatMinCol * FLAT_S + FLAT_PAD
+  const flatOy    = FLAT_PAD
+  const flatSvgW  = (flatMaxCol - flatMinCol) * FLAT_S + FLAT_PAD * 2
+  const flatSvgH  = flatMaxRow * FLAT_S + FLAT_PAD * 2
+
+  const activeSvgW = isFlat ? flatSvgW : svgW
+  const activeSvgH = isFlat ? flatSvgH : svgH
+
   // Sort tiles for painter's algorithm (back-to-front)
   const sortedTiles = useMemo(() =>
     [...tiles].sort((a, b) => (a.col + a.row) - (b.col + b.row)),
@@ -598,11 +791,11 @@ export default function IsometricMap() {
         </div>
       )}
       <svg
-        viewBox={`0 0 ${svgW} ${svgH}`}
-        width={svgW}
-        height={svgH}
+        viewBox={`0 0 ${activeSvgW} ${activeSvgH}`}
+        width={activeSvgW}
+        height={activeSvgH}
         style={{ display: 'block', maxWidth: '100%' }}
-        aria-label="GardenOps Isometric Facility Map"
+        aria-label="GardenOps Facility Map"
       >
         <defs>
           <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
@@ -613,75 +806,68 @@ export default function IsometricMap() {
             </feMerge>
           </filter>
 
-          {/* Fine grid pattern for floor */}
+          {/* Fine grid pattern for iso floor */}
           <pattern id="isofloor" x="0" y="0" width={TW} height={TH} patternUnits="userSpaceOnUse">
             <path d={`M 0 ${TH/2} L ${TW/2} 0 L ${TW} ${TH/2} L ${TW/2} ${TH} Z`}
-              fill="none" stroke="#111120" strokeWidth="0.4" />
+              fill="none" stroke={mapPalette.grid} strokeWidth="0.4" />
+          </pattern>
+
+          {/* Fine grid pattern for flat floor */}
+          <pattern id="flatgrid" x="0" y="0" width={FLAT_S} height={FLAT_S} patternUnits="userSpaceOnUse">
+            <rect width={FLAT_S} height={FLAT_S} fill="none" stroke={mapPalette.grid} strokeWidth="0.5" />
           </pattern>
         </defs>
 
         {/* Full map background */}
-        <rect x={0} y={0} width={svgW} height={svgH} fill="#080810" />
+        <rect x={0} y={0} width={activeSvgW} height={activeSvgH} fill={mapPalette.bg} />
 
-        {/* Section labels */}
-        <SectionLabels ox={ox} oy={oy} />
+        {/* Background grid overlay */}
+        {!isFlat && <rect x={0} y={0} width={activeSvgW} height={activeSvgH} fill="url(#isofloor)" opacity={0.3} />}
+        {isFlat  && <rect x={0} y={0} width={activeSvgW} height={activeSvgH} fill="url(#flatgrid)" opacity={0.4} />}
+
+        {/* Section labels (iso mode only) */}
+        {!isFlat && <SectionLabels ox={ox} oy={oy} palette={mapPalette} />}
 
         {/* Render all tiles sorted back-to-front */}
         {sortedTiles.map(tile => {
-          const fc = faceColors(tile.type, tile.status)
+          const fc = faceColors(tile.type, tile.status, mapTheme)
           const hasDefol = tile.symbols?.includes('defoliation')
           const hasNet   = tile.symbols?.includes('net')
           const isPendingOrigin = pendingTransferOrigin === tile.id
           const taskCount = tasks.filter(t => t.roomId === tile.id && t.status !== 'done').length
-          // Highlight eligible destinations while a transfer is pending
           const isTransferDest = !!pendingTransferOrigin
             && pendingTransferOrigin !== tile.id
             && tile.interactive
+          const tileColors = { top: fc.top, left: fc.left, right: fc.right, stroke: fc.stroke, label: fc.label }
+          const tileClick = !tile.interactive ? undefined : () => {
+            if (pendingTransferOrigin && pendingTransferOrigin !== tile.id) { completeTransfer(tile.id); return }
+            if (selectedFlagId === 'transfer') { startTransfer(tile.id); clearSelectedFlag(); return }
+            if (selectedFlagId) { addSymbolToRoom(tile.id, selectedFlagId, selectedFlagId); clearSelectedFlag(); return }
+            selectRoom(tile.id)
+          }
+          const sharedProps = {
+            key: tile.id,
+            room: tile,
+            colors: tileColors,
+            onClick: tileClick,
+            isSelected: selectedId === tile.id,
+            isHovered: hoveredId === tile.id,
+            isDragOver: dragOverId === tile.id || (!!(selectedFlagId && selectedFlagId !== 'transfer') && hoveredId === tile.id),
+            isPendingOrigin,
+            isTransferDest,
+            selectedFlagId,
+            onHover: setHoveredId,
+            onDragEnter: handleDragEnter,
+            onDragLeave: handleDragLeave,
+            onDrop: handleDrop,
+            taskCount,
+          }
 
-          return (
-            <IsoBox
-              key={tile.id}
-              room={tile}
-              ox={ox}
-              oy={oy}
-              colors={{ top: fc.top, left: fc.left, right: fc.right, stroke: fc.stroke, label: fc.label }}
-              onClick={() => {
-                if (!tile.interactive) return
-
-                if (pendingTransferOrigin && pendingTransferOrigin !== tile.id) {
-                  completeTransfer(tile.id)
-                  return
-                }
-
-                if (selectedFlagId === 'transfer') {
-                  startTransfer(tile.id)
-                  clearSelectedFlag()
-                  return
-                }
-
-                if (selectedFlagId) {
-                  addSymbolToRoom(tile.id, selectedFlagId, selectedFlagId)
-                  clearSelectedFlag()
-                  return
-                }
-
-                selectRoom(tile.id)
-              }}
-              isSelected={selectedId === tile.id}
-              isHovered={hoveredId === tile.id}
-              isDragOver={dragOverId === tile.id || (selectedFlagId && selectedFlagId !== 'transfer' && hoveredId === tile.id)}
-              isPendingOrigin={isPendingOrigin}
-              isTransferDest={isTransferDest}
-              selectedFlagId={selectedFlagId}
-              onHover={setHoveredId}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-              onDefolClick={hasDefol ? () => openDefolInfo(tile.id) : undefined}
-              onNetClick={hasNet ? () => openNetLog(tile.id) : undefined}
-              taskCount={taskCount}
-            />
-          )
+          return isFlat
+            ? <FlatBox {...sharedProps} flatOx={flatOx} flatOy={flatOy} />
+            : <IsoBox  {...sharedProps} ox={ox} oy={oy}
+                onDefolClick={hasDefol ? () => openDefolInfo(tile.id) : undefined}
+                onNetClick={hasNet ? () => openNetLog(tile.id) : undefined} />
         })}
 
         {/* Transfer connecting lines — rendered above all tiles */}
@@ -709,8 +895,8 @@ export default function IsometricMap() {
           )
         })}
 
-        {/* Corridor Production label */}
-        <CorridorLabel ox={ox} oy={oy} />
+        {/* Corridor Production label (iso only) */}
+        {!isFlat && <CorridorLabel ox={ox} oy={oy} palette={mapPalette} />}
       </svg>
 
       {/* Defoliation quick-view modal (scissors click) */}
@@ -738,7 +924,7 @@ export default function IsometricMap() {
 }
 
 // ── Corridor label overlaid on the corridor tile ────────────────────────────
-function CorridorLabel({ ox, oy }) {
+function CorridorLabel({ ox, oy, palette }) {
   const corrTile = LAYOUT.find(t => t.id === '_CORR_H')
   if (!corrTile) return null
   const { col, row, w, h } = corrTile
@@ -746,7 +932,7 @@ function CorridorLabel({ ox, oy }) {
   const cy = oy + (iso(col, row).y + iso(col + w, row).y + iso(col + w, row + h).y + iso(col, row + h).y) / 4
   return (
     <text x={cx} y={cy} textAnchor="middle" dominantBaseline="middle"
-      fill="#1a1a30" fontSize={7} fontFamily="'JetBrains Mono', monospace"
+      fill={palette?.corrLabel ?? '#1a1a30'} fontSize={7} fontFamily="'JetBrains Mono', monospace"
       fontWeight="600" letterSpacing="3" style={{ userSelect: 'none' }}>
       CORRIDOR PRODUCTION
     </text>
@@ -754,7 +940,7 @@ function CorridorLabel({ ox, oy }) {
 }
 
 // ── Section labels floating above the map ────────────────────────────────────
-function SectionLabels({ ox, oy }) {
+function SectionLabels({ ox, oy, palette }) {
   const vegCenter = useMemo(() => {
     const vegTiles = LAYOUT.filter(t => t.type === 'veg')
     let sx = 0, sy = 0
@@ -774,15 +960,17 @@ function SectionLabels({ ox, oy }) {
     return flower ? oy + iso(flower.col + flower.w / 2, flower.row).y - 20 : 0
   }, [oy])
 
+  const labelColor = palette?.sectionLabel ?? '#2d5c3a'
+
   return (
     <g style={{ pointerEvents: 'none', userSelect: 'none' }}>
       <text x={vegCenter.x} y={vegCenter.y} textAnchor="middle"
-        fill="#2d5c3a" fontSize={7.5} fontFamily="'JetBrains Mono', monospace"
+        fill={labelColor} fontSize={7.5} fontFamily="'JetBrains Mono', monospace"
         fontWeight="600" letterSpacing="3">
         ▸ VEG ROOMS
       </text>
       <text x={flowerCenterX} y={flowerY} textAnchor="middle"
-        fill="#1a4030" fontSize={7.5} fontFamily="'JetBrains Mono', monospace"
+        fill={labelColor} fontSize={7.5} fontFamily="'JetBrains Mono', monospace"
         fontWeight="600" letterSpacing="3">
         ▸ FLOWER BLOCK
       </text>

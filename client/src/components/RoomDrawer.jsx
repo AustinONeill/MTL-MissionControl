@@ -101,6 +101,79 @@ function YesNoLog({ label, apiPath, bodyFn }) {
   )
 }
 
+// ── Inline-editable task row ───────────────────────────────────────────────
+const PRIORITY_COLORS = { low: '#6b7280', normal: '#60a5fa', high: '#f87171' }
+
+function TaskRow({ task, onUpdate, onDelete }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft]     = useState({ title: task.title, priority: task.priority })
+
+  const next        = { todo: 'in_progress', in_progress: 'done' }[task.status]
+  const statusColor = task.status === 'in_progress' ? '#f59e0b' : '#6b7280'
+  const statusLabel = task.status === 'in_progress' ? 'IN PROGRESS' : 'TO DO'
+
+  const saveEdit = () => {
+    if (draft.title.trim()) {
+      onUpdate({ title: draft.title.trim(), priority: draft.priority })
+    }
+    setEditing(false)
+  }
+
+  const cancelEdit = () => {
+    setDraft({ title: task.title, priority: task.priority })
+    setEditing(false)
+  }
+
+  if (editing) {
+    return (
+      <div className="room-task-row room-task-row--editing">
+        <input
+          className="room-task-edit-input"
+          value={draft.title}
+          onChange={(e) => setDraft(d => ({ ...d, title: e.target.value }))}
+          onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(); if (e.key === 'Escape') cancelEdit() }}
+          autoFocus
+        />
+        <select
+          className="room-task-edit-priority"
+          value={draft.priority}
+          onChange={(e) => setDraft(d => ({ ...d, priority: e.target.value }))}
+        >
+          <option value="low">LOW</option>
+          <option value="normal">NORMAL</option>
+          <option value="high">HIGH</option>
+        </select>
+        <button className="room-task-edit-save" onClick={saveEdit} aria-label="Save">✓</button>
+        <button className="room-task-edit-cancel" onClick={cancelEdit} aria-label="Cancel">✕</button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="room-task-row">
+      <span
+        className="wb-priority-dot"
+        style={{ background: PRIORITY_COLORS[task.priority] ?? '#60a5fa', flexShrink: 0 }}
+      />
+      <span className="room-task-title">{task.title}</span>
+      <button
+        className="room-task-status"
+        style={{ color: statusColor, borderColor: statusColor }}
+        onClick={() => onUpdate({ status: next })}
+        title="Advance status"
+      >
+        {statusLabel}
+      </button>
+      <button
+        className="room-task-edit-btn"
+        onClick={() => { setDraft({ title: task.title, priority: task.priority }); setEditing(true) }}
+        aria-label="Edit task"
+      >✏</button>
+      <button className="room-task-delete" onClick={onDelete} aria-label="Delete">✕</button>
+    </div>
+  )
+}
+
 // ── SOP Viewer Modal ───────────────────────────────────────────────────────
 function SopViewerModal({ sop, onClose }) {
   return createPortal(
@@ -469,29 +542,21 @@ export default function RoomDrawer() {
                   <section className="drawer-section">
                     <h3 className="section-title">OPEN TASKS</h3>
                     <div className="room-tasks-list">
-                      {roomTasks.map(task => {
-                        const next = { todo: 'in_progress', in_progress: 'done' }[task.status]
-                        const statusColor = task.status === 'in_progress' ? '#f59e0b' : '#6b7280'
-                        const statusLabel = task.status === 'in_progress' ? 'IN PROGRESS' : 'TO DO'
-                        return (
-                          <div key={task.id} className="room-task-row">
-                            <span
-                              className="wb-priority-dot"
-                              style={{ background: { low: '#6b7280', normal: '#60a5fa', high: '#f87171' }[task.priority] ?? '#60a5fa', flexShrink: 0 }}
-                            />
-                            <span className="room-task-title">{task.title}</span>
-                            <button
-                              className="room-task-status"
-                              style={{ color: statusColor, borderColor: statusColor }}
-                              onClick={() => { updateTask(task.id, { status: next }); apiFetch(`/api/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify({ status: next }) }).catch(() => updateTask(task.id, { status: task.status })) }}
-                              title="Advance status"
-                            >
-                              {statusLabel}
-                            </button>
-                            <button className="room-task-delete" onClick={() => { deleteTask(task.id); apiFetch(`/api/tasks/${task.id}`, { method: 'DELETE' }).catch(() => {}) }} aria-label="Delete">✕</button>
-                          </div>
-                        )
-                      })}
+                      {roomTasks.map(task => (
+                        <TaskRow
+                          key={task.id}
+                          task={task}
+                          onUpdate={(patch) => {
+                            updateTask(task.id, patch)
+                            apiFetch(`/api/tasks/${task.id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+                              .catch(() => updateTask(task.id, task))
+                          }}
+                          onDelete={() => {
+                            deleteTask(task.id)
+                            apiFetch(`/api/tasks/${task.id}`, { method: 'DELETE' }).catch(() => {})
+                          }}
+                        />
+                      ))}
                     </div>
                   </section>
                 )}
