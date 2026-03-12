@@ -6,6 +6,8 @@ import LegendPanel, { SYMBOL_ITEMS } from './components/LegendPanel'
 import WhiteboardPanel from './components/WhiteboardPanel'
 import ChatPanel from './components/ChatPanel'
 import ChatNotificationBanner from './components/ChatNotificationBanner'
+import LandingPage from './components/LandingPage'
+import HubPage from './components/HubPage'
 import { useFacilityStore } from './store/facilityStore'
 import { useChatStore } from './store/chatStore'
 import { stackInitError } from './stack'
@@ -26,6 +28,10 @@ export default function App() {
   const [toolboxOpen, setToolboxOpen]         = useState(false)
   const [whiteboardOpen, setWhiteboardOpen]   = useState(false)
   const [chatOpen, setChatOpen]               = useState(false)
+  // Hub navigation — default to hub for fresh sign-ins, map for page refreshes
+  const [currentSection, setCurrentSection]   = useState(
+    () => sessionStorage.getItem('mtl-section') === 'map' ? 'map' : 'hub'
+  )
   const totalUnread = useChatStore(s => Object.values(s.unread).reduce((a, b) => a + b, 0))
 
   useEffect(() => {
@@ -54,13 +60,23 @@ export default function App() {
   }, [stackApp])
 
   useEffect(() => {
+    console.log('[MTL] user effect fired, user:', user ? `id=${user.id} email=${user.primaryEmail}` : 'null')
     if (user) {
-      user.getAuthJson().then(({ accessToken }) => {
+      user.getAuthJson().then((authJson) => {
+        console.log('[MTL] getAuthJson result:', {
+          hasAccessToken: !!authJson.accessToken,
+          tokenLength: authJson.accessToken?.length,
+          tokenPrefix: authJson.accessToken?.substring(0, 20),
+          keys: Object.keys(authJson),
+        })
+        const { accessToken } = authJson
         if (accessToken) {
           setAuthToken(accessToken)
           localStorage.setItem('stack-auth-token', accessToken)
           // Load rooms only after token is primed — avoids race condition
           loadRooms()
+        } else {
+          console.error('[MTL] getAuthJson returned NO accessToken — auth will fail')
         }
       }).catch((e) => console.error('[MTL] getAuthJson failed:', e))
 
@@ -85,6 +101,28 @@ export default function App() {
     if (drawerOpen) setToolboxOpen(false)
   }, [drawerOpen])
 
+  // Reset hub state on sign-out
+  useEffect(() => {
+    if (!user && user !== undefined) {
+      sessionStorage.removeItem('mtl-section')
+      setCurrentSection('hub')
+    }
+  }, [user])
+
+  const handleNavigate = (dest) => {
+    sessionStorage.setItem('mtl-section', 'map')
+    setCurrentSection('map')
+    if (dest === 'chat')  setTimeout(() => setChatOpen(true), 50)
+    if (dest === 'tasks') setTimeout(() => setWhiteboardOpen(true), 50)
+  }
+
+  const handleGoToHub = () => {
+    sessionStorage.setItem('mtl-section', 'hub')
+    setCurrentSection('hub')
+    setChatOpen(false)
+    setWhiteboardOpen(false)
+  }
+
   if (processingCallback) {
     return (
       <div className="app-shell">
@@ -95,9 +133,30 @@ export default function App() {
     )
   }
 
+  // Auth state loading — avoid flash of landing page for returning users
+  if (user === undefined) {
+    return (
+      <div className="app-shell">
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', fontSize: 11, letterSpacing: '3px' }}>
+          LOADING...
+        </div>
+      </div>
+    )
+  }
+
+  // Not authenticated — show landing page
+  if (!user) {
+    return <LandingPage />
+  }
+
+  // Authenticated — hub launchpad
+  if (currentSection === 'hub') {
+    return <HubPage user={user} onNavigate={handleNavigate} />
+  }
+
   return (
     <div className="app-shell">
-      <Header user={user} onWhiteboardOpen={() => setWhiteboardOpen(true)} onChatOpen={() => setChatOpen(true)} chatUnread={totalUnread} />
+      <Header user={user} onWhiteboardOpen={() => setWhiteboardOpen(true)} onChatOpen={() => setChatOpen(true)} chatUnread={totalUnread} onGoToHub={handleGoToHub} />
       {stackInitError && (
         <div className="auth-warning">Auth disabled: {stackInitError}</div>
       )}
@@ -171,13 +230,27 @@ function WelcomeBanner({ name, onDismiss }) {
   )
 }
 
-function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread }) {
+function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread, onGoToHub }) {
   const stackApp = useStackApp()
+  const onlineStatus = localStorage.getItem('mtl-online-status') || 'auto'
+  const statusClass = {
+    auto:   'online',
+    online: 'online',
+    away:   'away',
+    dnd:    'dnd',
+  }[onlineStatus] ?? 'online'
 
   return (
     <header className="topbar">
       <div className="topbar-left">
-        <span className="topbar-logo">⬡</span>
+        <button
+          className="topbar-home-btn"
+          onClick={onGoToHub}
+          aria-label="Return to Mission Control hub"
+          title="Hub"
+        >
+          ⬡
+        </button>
         <span className="topbar-wordmark">GARDENOPS</span>
         <span className="topbar-divider" />
         <span className="topbar-facility">MTL CANNABIS</span>
@@ -213,7 +286,7 @@ function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread }) {
         <button className="topbar-chat-btn" onClick={onChatOpen} aria-label="Open chat">
           💬{chatUnread > 0 && <span className="topbar-chat-badge">{chatUnread > 99 ? '99+' : chatUnread}</span>}
         </button>
-        <span className="topbar-status-indicator online" />
+        <span className={`topbar-status-indicator ${statusClass}`} title={`Status: ${onlineStatus}`} />
         <span className="topbar-status-text">LIVE</span>
         <span className="topbar-time" id="clock" />
       </div>
