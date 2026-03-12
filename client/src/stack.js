@@ -14,6 +14,8 @@ if (!projectId || !publishableClientKey) {
     stackApp = new StackClientApp({
       projectId,
       publishableClientKey,
+      // 'cookie' is required for PKCE OAuth flow to survive the redirect.
+      // If getAuthJson() returns no accessToken, the issue is on Stack Auth's side.
       tokenStore: 'cookie',
       urls: {
         home:         '/',
