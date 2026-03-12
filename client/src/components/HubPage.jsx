@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useStackApp } from '@stackframe/stack'
+import gardenopsLogo from '../assets/gardenops-logo.png'
 
 const STATUS_OPTIONS = [
   { key: 'auto',   label: 'Auto',            dot: 'status-dot--auto',   desc: 'Follows system activity' },
@@ -72,7 +73,7 @@ export default function HubPage({ user, onNavigate }) {
       {/* ── Nav ─────────────────────────────────────────── */}
       <nav className="hub-nav" aria-label="Hub navigation">
         <div className="hub-nav-logo">
-          <span className="hub-nav-glyph" aria-hidden="true">⬡</span>
+          <img src={gardenopsLogo} alt="" aria-hidden="true" className="hub-nav-logo-img" />
           <span className="hub-nav-wordmark">GARDENOPS</span>
           <span className="hub-nav-divider" aria-hidden="true" />
           <span className="hub-nav-sub">MISSION CONTROL</span>
@@ -215,7 +216,7 @@ export default function HubPage({ user, onNavigate }) {
 
       {/* ── Footer ─────────────────────────────────────── */}
       <footer className="hub-footer" role="contentinfo">
-        <span className="hub-footer-glyph" aria-hidden="true">⬡</span>
+        <img src={gardenopsLogo} alt="" aria-hidden="true" className="hub-footer-logo-img" />
         GARDENOPS — MTL CANNABIS · Confidential
       </footer>
 

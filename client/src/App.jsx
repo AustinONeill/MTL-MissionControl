@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useUser, useStackApp } from '@stackframe/stack'
+import gardenopsLogo from './assets/gardenops-logo.png'
 import IsometricMap from './components/IsometricMap'
 import RoomDrawer from './components/RoomDrawer'
 import LegendPanel, { SYMBOL_ITEMS } from './components/LegendPanel'
@@ -249,7 +250,7 @@ function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread, onGoToHub }) {
           aria-label="Return to Mission Control hub"
           title="Hub"
         >
-          ⬡
+          <img src={gardenopsLogo} alt="GardenOps" className="topbar-logo-img" />
         </button>
         <span className="topbar-wordmark">GARDENOPS</span>
         <span className="topbar-divider" />

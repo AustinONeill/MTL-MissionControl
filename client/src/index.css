@@ -115,6 +115,31 @@ html, body, #root {
   box-shadow: 0 0 6px #f87171;
 }
 
+/* Logo image — used in topbar, nav bars, footers */
+.topbar-logo-img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 0 4px rgba(74,222,128,0.3));
+}
+.lp-nav-logo-img,
+.hub-nav-logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 0 4px rgba(74,222,128,0.25));
+}
+.lp-footer-logo-img,
+.hub-footer-logo-img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+  display: block;
+  opacity: 0.6;
+}
+
 /* Topbar home button */
 .topbar-home-btn {
   background: none;

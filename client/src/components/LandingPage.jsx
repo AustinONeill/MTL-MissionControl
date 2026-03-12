@@ -1,4 +1,5 @@
 import { useStackApp } from '@stackframe/stack'
+import gardenopsLogo from '../assets/gardenops-logo.png'
 
 function MicrosoftIcon() {
   return (
@@ -45,7 +46,7 @@ export default function LandingPage() {
       {/* ── Nav ─────────────────────────────────────────────── */}
       <nav className="lp-nav" aria-label="Main navigation">
         <div className="lp-nav-logo">
-          <span className="lp-nav-glyph" aria-hidden="true">⬡</span>
+          <img src={gardenopsLogo} alt="" aria-hidden="true" className="lp-nav-logo-img" />
           <span className="lp-nav-wordmark">GARDENOPS</span>
           <span className="lp-nav-divider" aria-hidden="true" />
           <span className="lp-nav-sub">MISSION CONTROL</span>
@@ -138,7 +139,7 @@ export default function LandingPage() {
 
       {/* ── Footer ──────────────────────────────────────────── */}
       <footer className="lp-footer" role="contentinfo">
-        <span className="lp-footer-logo" aria-hidden="true">⬡</span>
+        <img src={gardenopsLogo} alt="" aria-hidden="true" className="lp-footer-logo-img" />
         <span>GARDENOPS — MTL CANNABIS</span>
         <span className="lp-footer-sep" aria-hidden="true">·</span>
         <span>Confidential — Authorized Access Only</span>
