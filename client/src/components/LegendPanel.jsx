@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react'
-import { useChatStore }    from '../store/chatStore'
-import { useFacilityStore } from '../store/facilityStore'
+import useDraggable from '../hooks/useDraggable'
 
 const STATUS_ITEMS = [
   { color: '#4ade80', label: 'Normal' },
@@ -20,29 +19,19 @@ export const SYMBOL_ITEMS = [
   { key: 'issue',         glyph: '⚠',  label: 'Open Issue' },
 ]
 
-export default function LegendPanel({ onOpenBoard, onOpenMessages }) {
-  const [side,         setSide]         = useState('left')
-  const [collapsed,    setCollapsed]    = useState(false)
-  const [dragging,     setDragging]     = useState(null)
-  const [boardOpen,    setBoardOpen]    = useState(false)
-  const [messagesOpen, setMessagesOpen] = useState(false)
-  const [filtersOpen,  setFiltersOpen]  = useState(false)
-  const [hiddenTypes,  setHiddenTypes]  = useState(new Set())
+export default function LegendPanel({ panelRef, siblingRefs }) {
+  const [collapsed,   setCollapsed]   = useState(false)
+  const [dragSymbol,  setDragSymbol]  = useState(null)   // which overlay glyph is being dragged to a room
+  const [filtersOpen, setFiltersOpen] = useState(false)
+  const [hiddenTypes, setHiddenTypes] = useState(new Set())
   const ghostRef = useRef(null)
 
-  // Board preview — task summary from store
-  const tasks = useFacilityStore(s => s.tasks)
-  const todoCount = tasks.filter(t => t.status === 'todo').length
-  const inProgCount = tasks.filter(t => t.status === 'in_progress').length
-  const recentTasks = tasks.filter(t => t.status !== 'done').slice(0, 3)
-
-  // Messages preview — last 3 messages across all conversations
-  const allMessages = useChatStore(s => s.messages)
-  const recentMsgs  = Object.values(allMessages)
-    .flat()
-    .filter(m => m?.content)
-    .sort((a, b) => new Date(b.createdAt ?? 0) - new Date(a.createdAt ?? 0))
-    .slice(0, 3)
+  const { pos, onDragStart } = useDraggable(
+    panelRef,
+    { x: 20, y: 80 },
+    'mtl-panel-legend',
+    siblingRefs,
+  )
 
   const toggleHidden = (key) => setHiddenTypes(prev => {
     const next = new Set(prev)
@@ -50,13 +39,12 @@ export default function LegendPanel({ onOpenBoard, onOpenMessages }) {
     return next
   })
 
-  const handleDragStart = (e, item) => {
-    // Set transfer data (text/plain is most reliable for SVG drop targets)
+  // ── Overlay glyph drag-to-room (HTML5 dataTransfer — separate from panel drag) ──
+  const handleSymbolDragStart = (e, item) => {
     e.dataTransfer.effectAllowed = 'copy'
     e.dataTransfer.setData('text/plain', item.key)
     e.dataTransfer.setData('application/gardenops-symbol', item.key)
 
-    // Custom drag ghost — large glyph pill
     const ghost = document.createElement('div')
     ghost.textContent = item.glyph
     ghost.setAttribute('aria-hidden', 'true')
@@ -71,12 +59,11 @@ export default function LegendPanel({ onOpenBoard, onOpenMessages }) {
     document.body.appendChild(ghost)
     ghostRef.current = ghost
     e.dataTransfer.setDragImage(ghost, 20, 20)
-
-    setDragging(item.key)
+    setDragSymbol(item.key)
   }
 
-  const handleDragEnd = () => {
-    setDragging(null)
+  const handleSymbolDragEnd = () => {
+    setDragSymbol(null)
     if (ghostRef.current) {
       document.body.removeChild(ghostRef.current)
       ghostRef.current = null
@@ -85,23 +72,16 @@ export default function LegendPanel({ onOpenBoard, onOpenMessages }) {
 
   return (
     <div
-      className={`legend-panel ${side} ${collapsed ? 'collapsed' : ''}`}
+      ref={panelRef}
+      className={`legend-panel${collapsed ? ' collapsed' : ''}`}
+      style={{ left: pos.x, top: pos.y }}
       role="complementary"
       aria-label="Map legend"
     >
-      {/* ── Title bar ─────────────────────────────────────────── */}
-      <div className="lp-header">
-        <button
-          className="lp-icon-btn"
-          title={side === 'left' ? 'Move to right' : 'Move to left'}
-          onClick={() => setSide(s => s === 'left' ? 'right' : 'left')}
-          aria-label="Swap panel side"
-        >
-          {side === 'left' ? '⇥' : '⇤'}
-        </button>
-
+      {/* ── Title bar (drag handle) ────────────────────────────── */}
+      <div className="lp-header" onMouseDown={onDragStart}>
+        <span className="lp-drag-indicator" aria-hidden="true">⠿</span>
         <span className="lp-title">LEGEND</span>
-
         <button
           className="lp-icon-btn"
           title={collapsed ? 'Expand' : 'Collapse'}
@@ -134,10 +114,10 @@ export default function LegendPanel({ onOpenBoard, onOpenMessages }) {
           {SYMBOL_ITEMS.map((item) => (
             <li
               key={item.key}
-              className={`lp-row lp-row--draggable ${dragging === item.key ? 'lp-row--dragging' : ''}`}
+              className={`lp-row lp-row--draggable ${dragSymbol === item.key ? 'lp-row--dragging' : ''}`}
               draggable
-              onDragStart={(e) => handleDragStart(e, item)}
-              onDragEnd={handleDragEnd}
+              onDragStart={(e) => handleSymbolDragStart(e, item)}
+              onDragEnd={handleSymbolDragEnd}
               title={`Drag onto a room to log: ${item.label}`}
             >
               <span className="lp-drag-handle">⠿</span>
@@ -155,85 +135,7 @@ export default function LegendPanel({ onOpenBoard, onOpenMessages }) {
         </p>
       </div>
 
-      {/* ── Board Toolbox: task summary preview ─────────────── */}
-      <div className="lp-accordion">
-        <button
-          className="lp-accordion-toggle"
-          onClick={() => setBoardOpen(o => !o)}
-          aria-expanded={boardOpen}
-          aria-label={boardOpen ? 'Collapse board preview' : 'Expand board preview'}
-        >
-          <span className="lp-accordion-label">BOARD</span>
-          <span className={`lp-accordion-arrow${boardOpen ? ' open' : ''}`}>{boardOpen ? '−' : '+'}</span>
-        </button>
-        {boardOpen && (
-          <div className="lp-accordion-body lp-toolbox-preview">
-            <div className="lp-preview-stats">
-              <span className="lp-preview-stat">
-                <span className="lp-stat-dot" style={{ background: '#6b7280' }} />
-                <span className="lp-stat-val">{todoCount}</span>
-                <span className="lp-stat-label">TODO</span>
-              </span>
-              <span className="lp-preview-stat">
-                <span className="lp-stat-dot" style={{ background: '#f59e0b' }} />
-                <span className="lp-stat-val">{inProgCount}</span>
-                <span className="lp-stat-label">IN PROGRESS</span>
-              </span>
-            </div>
-            {recentTasks.length === 0 ? (
-              <p className="lp-chat-empty">No open tasks</p>
-            ) : (
-              recentTasks.map((t, i) => (
-                <div key={t.id ?? i} className="lp-chat-msg">
-                  <span className="lp-chat-sender" style={{ color: t.status === 'in_progress' ? '#f59e0b' : 'var(--text-muted)' }}>
-                    {t.status === 'in_progress' ? '▶' : '○'} {t.priority?.toUpperCase() ?? 'NORMAL'}
-                  </span>
-                  <span className="lp-chat-content">{t.title}</span>
-                </div>
-              ))
-            )}
-            <button className="lp-expand-btn" onClick={onOpenBoard} aria-label="Open full task board">
-              Open Board ↗
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ── Messages Toolbox: chat preview ───────────────────── */}
-      <div className="lp-accordion">
-        <button
-          className="lp-accordion-toggle"
-          onClick={() => setMessagesOpen(o => !o)}
-          aria-expanded={messagesOpen}
-          aria-label={messagesOpen ? 'Collapse messages preview' : 'Expand messages preview'}
-        >
-          <span className="lp-accordion-label">MESSAGES</span>
-          <span className={`lp-accordion-arrow${messagesOpen ? ' open' : ''}`}>{messagesOpen ? '−' : '+'}</span>
-        </button>
-        {messagesOpen && (
-          <div className="lp-accordion-body lp-toolbox-preview">
-            {recentMsgs.length === 0 ? (
-              <p className="lp-chat-empty">No recent messages</p>
-            ) : (
-              recentMsgs.map((msg, i) => (
-                <div key={msg.id ?? i} className="lp-chat-msg">
-                  <span className="lp-chat-sender">
-                    {msg.senderName ?? msg.authorName ?? 'User'}
-                  </span>
-                  <span className="lp-chat-content">
-                    {msg.content.length > 55 ? msg.content.slice(0, 55) + '…' : msg.content}
-                  </span>
-                </div>
-              ))
-            )}
-            <button className="lp-expand-btn" onClick={onOpenMessages} aria-label="Open full chat">
-              Open Chat ↗
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* ── Filters: toggle overlay visibility ───────────────── */}
+      {/* ── Filters ───────────────────────────────────────────── */}
       <div className="lp-accordion">
         <button
           className="lp-accordion-toggle"

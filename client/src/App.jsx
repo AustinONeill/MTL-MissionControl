@@ -3,7 +3,8 @@ import { useUser, useStackApp } from '@stackframe/stack'
 import gardenopsLogo from './assets/gardenops-logo.png'
 import IsometricMap from './components/IsometricMap'
 import RoomDrawer from './components/RoomDrawer'
-import LegendPanel, { SYMBOL_ITEMS } from './components/LegendPanel'
+import ToolboxPanel from './components/ToolboxPanel'
+import { SYMBOL_ITEMS } from './data/overlaySymbols'
 import WhiteboardPanel from './components/WhiteboardPanel'
 import ChatPanel from './components/ChatPanel'
 import ChatNotificationBanner from './components/ChatNotificationBanner'
@@ -173,7 +174,7 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Header user={user} onWhiteboardOpen={() => setWhiteboardOpen(true)} onChatOpen={() => setChatOpen(true)} chatUnread={totalUnread} onGoToHub={handleGoToHub} theme={theme} onThemeChange={setTheme} mapView={mapView} onToggleView={toggleMapView} />
+      <Header user={user} onGoToHub={handleGoToHub} theme={theme} onThemeChange={setTheme} mapView={mapView} onToggleView={toggleMapView} />
       {stackInitError && (
         <div className="auth-warning">Auth disabled: {stackInitError}</div>
       )}
@@ -181,24 +182,30 @@ export default function App() {
       <main className="map-view">
         <IsometricMap />
       </main>
-      <LegendPanel onOpenBoard={() => setWhiteboardOpen(true)} onOpenMessages={() => setChatOpen(true)} />
+      <ToolboxPanel onOpenBoard={() => setWhiteboardOpen(true)} onOpenMessages={() => setChatOpen(true)} unread={totalUnread} />
       <RoomDrawer />
       <WhiteboardPanel open={whiteboardOpen} onClose={() => setWhiteboardOpen(false)} />
       <ChatPanel open={chatOpen} onClose={() => setChatOpen(false)} />
       <ChatNotificationBanner onOpenChat={() => setChatOpen(true)} />
       <LiveClock />
 
-      {/* Mobile FAB */}
-      <button
-        className={`fab-toolbox${selectedFlagId ? ' fab-toolbox--cancel' : ''}`}
-        onClick={() => {
-          if (selectedFlagId) { clearSelectedFlag(); return }
-          setToolboxOpen(o => !o)
-        }}
-        aria-label={selectedFlagId ? 'Cancel overlay' : 'Open toolbox'}
-      >
-        {selectedFlagId ? '✕' : '+'}
-      </button>
+      {/* Mobile FAB group */}
+      {selectedFlagId ? (
+        <button className="fab-toolbox fab-toolbox--cancel" onClick={clearSelectedFlag} aria-label="Cancel overlay">✕</button>
+      ) : (
+        <div className="fab-group">
+          <button className="fab-action" onClick={() => setWhiteboardOpen(true)} aria-label="Open task board">
+            📋
+            <span className="fab-action-label">BOARD</span>
+          </button>
+          <button className="fab-action" onClick={() => setChatOpen(true)} aria-label="Open team chat">
+            💬
+            {totalUnread > 0 && <span className="fab-action-badge">{totalUnread > 9 ? '9+' : totalUnread}</span>}
+            <span className="fab-action-label">MSGS</span>
+          </button>
+          <button className="fab-toolbox" onClick={() => setToolboxOpen(o => !o)} aria-label="Open overlay toolbox">+</button>
+        </div>
+      )}
 
       {/* Mobile Toolbox Bottom Sheet */}
       {toolboxOpen && (
@@ -218,25 +225,6 @@ export default function App() {
           <>
             <p className="mobile-sheet-section-label">QUICK ACCESS</p>
             <div className="mobile-quick-row">
-              <button
-                className="mobile-quick-btn"
-                onClick={() => { setWhiteboardOpen(true); setToolboxOpen(false) }}
-                aria-label="Open task board"
-              >
-                <span className="mobile-quick-icon">📋</span>
-                <span className="mobile-quick-label">BOARD</span>
-              </button>
-              <button
-                className="mobile-quick-btn"
-                onClick={() => { setChatOpen(true); setToolboxOpen(false) }}
-                aria-label="Open team chat"
-              >
-                <span className="mobile-quick-icon">💬</span>
-                <span className="mobile-quick-label">MESSAGES</span>
-                {totalUnread > 0 && (
-                  <span className="mobile-quick-badge">{totalUnread > 9 ? '9+' : totalUnread}</span>
-                )}
-              </button>
               <button
                 className={`mobile-quick-btn${mapView === '3D' ? ' mobile-quick-btn--active' : ''}`}
                 onClick={() => { toggleMapView(); setToolboxOpen(false) }}
@@ -303,7 +291,7 @@ const THEMES = [
   { id: 'bright-mode',   label: 'Bright Mode',    dot: '#16a34a' },
 ]
 
-function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread, onGoToHub, theme, onThemeChange, mapView, onToggleView }) {
+function Header({ user, onGoToHub, theme, onThemeChange, mapView, onToggleView }) {
   const stackApp   = useStackApp()
   const rooms      = useFacilityStore(s => s.rooms)
   const selectRoom = useFacilityStore(s => s.selectRoom)
@@ -442,10 +430,6 @@ function Header({ user, onWhiteboardOpen, onChatOpen, chatUnread, onGoToHub, the
         <span className="topbar-status-text">LIVE</span>
         <span className="topbar-time" id="clock" />
 
-        <button className="topbar-wb-btn"   onClick={onWhiteboardOpen} aria-label="Open task board">BOARD</button>
-        <button className="topbar-chat-btn" onClick={onChatOpen}       aria-label="Open team chat">
-          💬{chatUnread > 0 && <span className="topbar-chat-badge">{chatUnread > 99 ? '99+' : chatUnread}</span>}
-        </button>
 
         {user ? (
           <div className="topbar-avatar-wrap">

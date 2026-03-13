@@ -114,7 +114,6 @@ export default function HubPage({ user, onNavigate }) {
 
               <div className="hub-profile-info">
                 <div className="hub-profile-name">{user.displayName ?? '—'}</div>
-                <div className="hub-profile-email">{user.primaryEmail}</div>
               </div>
             </div>
 

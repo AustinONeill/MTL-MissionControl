@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { useFacilityStore } from '../store/facilityStore'
-import { SYMBOL_ITEMS } from './LegendPanel'
+import { SYMBOL_ITEMS } from '../data/overlaySymbols'
 import { getSopForOverlay } from '../data/sops'
 
 /**
