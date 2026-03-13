@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { useFacilityStore, STATUS, MODES } from '../store/facilityStore'
 import DefoliationModal from './DefoliationModal'
@@ -24,11 +24,41 @@ const TYPE_COLOR = {
   utility: { label: '#a78bfa', border: '#3a2d6a', bg: '#14102a' },
 }
 
-const STATUS_COLORS = {
-  [STATUS.NORMAL]: { label: '#4ade80', border: '#1a4d2a', bg: '#0a1f12' },
-  [STATUS.WARN]:   { label: '#facc15', border: '#6b5c00', bg: '#1a1600' },
-  [STATUS.ALERT]:  { label: '#f87171', border: '#7a1a1a', bg: '#1f0909' },
-  [STATUS.IDLE]:   { label: '#6b7280', border: '#2a2d35', bg: '#0d0f13' },
+const STATUS_COLORS_BY_THEME = {
+  'night-mode': {
+    [STATUS.NORMAL]: { label: '#4ade80', border: '#1a4d2a', bg: '#0a1f12' },
+    [STATUS.WARN]:   { label: '#facc15', border: '#6b5c00', bg: '#1a1600' },
+    [STATUS.ALERT]:  { label: '#f87171', border: '#7a1a1a', bg: '#1f0909' },
+    [STATUS.IDLE]:   { label: '#6b7280', border: '#2a2d35', bg: '#0d0f13' },
+  },
+  'gas-n-up': {
+    [STATUS.NORMAL]: { label: '#f97316', border: '#7a3010', bg: '#1a0e06' },
+    [STATUS.WARN]:   { label: '#fbbf24', border: '#6b5000', bg: '#1a1200' },
+    [STATUS.ALERT]:  { label: '#c084fc', border: '#5b21b6', bg: '#180d2e' },
+    [STATUS.IDLE]:   { label: '#6b7280', border: '#2a2d1a', bg: '#0d0f08' },
+  },
+  'frostd-flakes': {
+    [STATUS.NORMAL]: { label: '#15803d', border: '#86efac', bg: '#dcfce7' },
+    [STATUS.WARN]:   { label: '#b45309', border: '#fcd34d', bg: '#fef9c3' },
+    [STATUS.ALERT]:  { label: '#b91c1c', border: '#fca5a5', bg: '#fee2e2' },
+    [STATUS.IDLE]:   { label: '#4b5563', border: '#d1d5db', bg: '#f3f4f6' },
+  },
+  'bright-mode': {
+    [STATUS.NORMAL]: { label: '#166534', border: '#86efac', bg: '#dcfce7' },
+    [STATUS.WARN]:   { label: '#92400e', border: '#fcd34d', bg: '#fef9c3' },
+    [STATUS.ALERT]:  { label: '#991b1b', border: '#fca5a5', bg: '#fee2e2' },
+    [STATUS.IDLE]:   { label: '#374151', border: '#d1d5db', bg: '#f3f4f6' },
+  },
+}
+
+function useTheme() {
+  const [theme, setTheme] = useState(() => document.documentElement.dataset.theme || 'night-mode')
+  useEffect(() => {
+    const observer = new MutationObserver(() => setTheme(document.documentElement.dataset.theme || 'night-mode'))
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    return () => observer.disconnect()
+  }, [])
+  return theme
 }
 
 const MODE_OPTIONS = [
@@ -420,6 +450,8 @@ function SOPsTab({ symbols }) {
 // ── Main Drawer ────────────────────────────────────────────────────────────
 export default function RoomDrawer() {
   const { selectedRoomId, drawerOpen, closeDrawer, getRoom, updateRoomStatus, updateRoomMode, transfers, tasks, updateTask, deleteTask } = useFacilityStore()
+  const theme = useTheme()
+  const STATUS_COLORS = STATUS_COLORS_BY_THEME[theme] ?? STATUS_COLORS_BY_THEME['night-mode']
   const room = selectedRoomId ? getRoom(selectedRoomId) : null
   const roomTasks = room ? tasks.filter(t => t.roomId === room.id && t.status !== 'done') : []
   const transferAsOrigin = room ? transfers[room.id] : null
@@ -496,6 +528,9 @@ export default function RoomDrawer() {
                 </button>
               ))}
             </div>
+
+            {/* ── Tab content (scrollable) ─────────────────────────── */}
+            <div className="drawer-tab-content">
 
             {/* ── Tab: Overview ────────────────────────────────────── */}
             {tab === 'OVERVIEW' && (
@@ -659,6 +694,8 @@ export default function RoomDrawer() {
             {tab === 'SOPs' && (
               <SOPsTab key={room.id} symbols={room.symbols} />
             )}
+
+            </div>{/* end drawer-tab-content */}
           </>
         )}
       </aside>

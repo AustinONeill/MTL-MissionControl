@@ -8,7 +8,9 @@ import { SYMBOL_ITEMS, STATUS_ITEMS } from '../data/overlaySymbols'
 // Section content renderers
 // ─────────────────────────────────────────────────────────────────
 
-function LegendContent({ dragSymbol, setDragSymbol, ghostRef, filtersOpen, setFiltersOpen, hiddenTypes, setHiddenTypes }) {
+function LegendContent({ dragSymbol, setDragSymbol, ghostRef, filtersOpen, setFiltersOpen }) {
+  const hiddenTypes       = useFacilityStore(s => s.hiddenOverlayTypes)
+  const toggleOverlayFilter = useFacilityStore(s => s.toggleOverlayFilter)
   const handleDragStart = (e, item) => {
     e.dataTransfer.effectAllowed = 'copy'
     e.dataTransfer.setData('text/plain', item.key)
@@ -39,11 +41,7 @@ function LegendContent({ dragSymbol, setDragSymbol, ghostRef, filtersOpen, setFi
     }
   }
 
-  const toggleHidden = (key) => setHiddenTypes(prev => {
-    const next = new Set(prev)
-    next.has(key) ? next.delete(key) : next.add(key)
-    return next
-  })
+  const toggleHidden = (key) => toggleOverlayFilter(key)
 
   return (
     <div className="tb-section-body">
@@ -205,7 +203,6 @@ export default function ToolboxPanel({ onOpenBoard, onOpenMessages, unread }) {
   // Legend-specific state (persists across detach/reattach)
   const [dragSymbol,  setDragSymbol]  = useState(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
-  const [hiddenTypes, setHiddenTypes] = useState(new Set())
   const ghostRef = useRef(null)
 
   // One ref per panel (main + each potentially-detached section)
@@ -229,7 +226,7 @@ export default function ToolboxPanel({ onOpenBoard, onOpenMessages, unread }) {
   const sectionRefs  = { legend: legendRef,  board: boardRef,  messages: messagesRef  }
 
   const renderContent = (id) => {
-    if (id === 'legend')   return <LegendContent dragSymbol={dragSymbol} setDragSymbol={setDragSymbol} ghostRef={ghostRef} filtersOpen={filtersOpen} setFiltersOpen={setFiltersOpen} hiddenTypes={hiddenTypes} setHiddenTypes={setHiddenTypes} />
+    if (id === 'legend')   return <LegendContent dragSymbol={dragSymbol} setDragSymbol={setDragSymbol} ghostRef={ghostRef} filtersOpen={filtersOpen} setFiltersOpen={setFiltersOpen} />
     if (id === 'board')    return <BoardContent onOpen={onOpenBoard} />
     if (id === 'messages') return <MessagesContent onOpen={onOpenMessages} unread={unread} />
     return null

@@ -122,6 +122,14 @@ export const useFacilityStore = create((set, get) => ({
   updateTask: (id, patch) => set(s => ({ tasks: s.tasks.map(t => t.id === id ? { ...t, ...patch } : t) })),
   deleteTask: (id) => set(s => ({ tasks: s.tasks.filter(t => t.id !== id) })),
 
+  // Overlay visibility filters
+  hiddenOverlayTypes: new Set(),
+  toggleOverlayFilter: (key) => set(s => {
+    const next = new Set(s.hiddenOverlayTypes)
+    next.has(key) ? next.delete(key) : next.add(key)
+    return { hiddenOverlayTypes: next }
+  }),
+
   // Mobile flag selection
   selectedFlagId: null,
 

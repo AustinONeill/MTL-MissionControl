@@ -12,6 +12,7 @@ import LandingPage from './components/LandingPage'
 import HubPage from './components/HubPage'
 import { useFacilityStore } from './store/facilityStore'
 import { useChatStore } from './store/chatStore'
+import useSwipeGestures from './hooks/useSwipeGestures'
 import { stackInitError } from './stack'
 import { setAuthToken } from './lib/apiFetch'
 import './App.css'
@@ -35,6 +36,8 @@ export default function App() {
     () => sessionStorage.getItem('mtl-section') === 'map' ? 'map' : 'hub'
   )
   const totalUnread = useChatStore(s => Object.values(s.unread).reduce((a, b) => a + b, 0))
+
+  useSwipeGestures({ chatOpen, setChatOpen, whiteboardOpen, setWhiteboardOpen })
 
   // ── Theme system ─────────────────────────────────────────────
   const [theme, setTheme] = useState(() => localStorage.getItem('mtl-theme') || 'night-mode')
@@ -189,8 +192,26 @@ export default function App() {
       <ChatNotificationBanner onOpenChat={() => setChatOpen(true)} />
       <LiveClock />
 
+      {/* Mobile swipe handles — safe touch targets on the right edge */}
+      <button
+        className={`swipe-handle swipe-handle--chat${chatOpen ? ' swipe-handle--open' : ''}`}
+        onClick={() => setChatOpen(o => !o)}
+        aria-label={chatOpen ? 'Close chat' : 'Open chat'}
+      >
+        <span className="swipe-handle-chevron">{chatOpen ? '›' : '‹'}</span>
+        <span className="swipe-handle-label">CHAT</span>
+      </button>
+      <button
+        className={`swipe-handle swipe-handle--tasks${whiteboardOpen ? ' swipe-handle--open' : ''}`}
+        onClick={() => setWhiteboardOpen(o => !o)}
+        aria-label={whiteboardOpen ? 'Close tasks' : 'Open tasks'}
+      >
+        <span className="swipe-handle-chevron">{whiteboardOpen ? '›' : '‹'}</span>
+        <span className="swipe-handle-label">TASKS</span>
+      </button>
+
       {/* Mobile FAB group */}
-      {selectedFlagId ? (
+      {!chatOpen && (selectedFlagId ? (
         <button className="fab-toolbox fab-toolbox--cancel" onClick={clearSelectedFlag} aria-label="Cancel overlay">✕</button>
       ) : (
         <div className="fab-group">
@@ -205,7 +226,7 @@ export default function App() {
           </button>
           <button className="fab-toolbox" onClick={() => setToolboxOpen(o => !o)} aria-label="Open overlay toolbox">+</button>
         </div>
-      )}
+      ))}
 
       {/* Mobile Toolbox Bottom Sheet */}
       {toolboxOpen && (

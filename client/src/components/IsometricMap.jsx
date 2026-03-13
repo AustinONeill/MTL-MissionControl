@@ -101,6 +101,38 @@ const MAP_PALETTES = {
   },
 }
 
+// ─── Light schedule glow colours — per theme, lit + unlit tint ───────────────
+const LIGHT_PALETTES = {
+  'night-mode': {
+    litTop:    { fill: '#ffd966', op: 0.14 },
+    litWallL:  { fill: '#ff9a2e', op: 0.07 },
+    litWallR:  { fill: '#ff9a2e', op: 0.04 },
+    unlitTop:  { fill: '#08081a', op: 0.20 },
+    unlitWall: { fill: '#05050f', op: 0.14 },
+  },
+  'gas-n-up': {
+    litTop:    { fill: '#ffcc44', op: 0.16 },
+    litWallL:  { fill: '#ff8820', op: 0.08 },
+    litWallR:  { fill: '#ff8820', op: 0.05 },
+    unlitTop:  { fill: '#030d03', op: 0.25 },
+    unlitWall: { fill: '#020902', op: 0.18 },
+  },
+  'frostd-flakes': {
+    litTop:    { fill: '#f59e0b', op: 0.28 },
+    litWallL:  { fill: '#d97706', op: 0.14 },
+    litWallR:  { fill: '#d97706', op: 0.10 },
+    unlitTop:  { fill: '#1a2f2a', op: 0.18 },
+    unlitWall: { fill: '#1a2f2a', op: 0.12 },
+  },
+  'bright-mode': {
+    litTop:    { fill: '#f59e0b', op: 0.28 },
+    litWallL:  { fill: '#d97706', op: 0.14 },
+    litWallR:  { fill: '#d97706', op: 0.10 },
+    unlitTop:  { fill: '#1a2426', op: 0.16 },
+    unlitWall: { fill: '#1a2426', op: 0.10 },
+  },
+}
+
 // ─── Status → 3 face colors using active theme palette ──────────────────────
 const faceColors = (type, status, theme = 'night-mode') => {
   const p = MAP_PALETTES[theme] || MAP_PALETTES['night-mode']
@@ -221,7 +253,7 @@ const LAYOUT = [
 
 // ─── Single isometric box tile ───────────────────────────────────────────────
 function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover, onDefolClick, onNetClick,
-                  isDragOver, onDragEnter, onDragLeave, onDrop, isPendingOrigin, isTransferDest, selectedFlagId, taskCount }) {
+                  isDragOver, onDragEnter, onDragLeave, onDrop, isPendingOrigin, isTransferDest, selectedFlagId, taskCount, hiddenOverlayTypes, isLit, lightColors }) {
   const { col, row, w, h } = room
   const s = (gx, gy) => ({ x: ox + iso(gx, gy).x, y: oy + iso(gx, gy).y })
 
@@ -271,7 +303,7 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
   const cy = (TL.y + TR.y + BR.y + BL.y) / 4
 
   // Symbol strip — positioned near the south edge of the top face
-  const symbols = (room.symbols || []).slice(0, 4)
+  const symbols = (room.symbols || []).filter(s => !hiddenOverlayTypes?.has(s)).slice(0, 4)
   const symY = (BL.y + BR.y) / 2 - 6
   const symStartX = (BL.x + BR.x) / 2 - (symbols.length * 10) / 2
 
@@ -334,6 +366,21 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
 
       {/* Top face (lightest) */}
       <polygon points={pts([TL, TR, BR, BL])} fill={colors.top} stroke={colors.stroke} strokeWidth={0.8} />
+
+      {/* Light glow — per-theme warm/dark overlay, animates on/off with grow-light schedule */}
+      {room.interactive && lightColors && (
+        <>
+          <polygon points={pts([TL, TR, BR, BL])}
+            fill={isLit ? lightColors.litTop.fill   : lightColors.unlitTop.fill}
+            style={{ fillOpacity: isLit ? lightColors.litTop.op   : lightColors.unlitTop.op,  transition: isLit ? 'fill-opacity 6s ease-in' : 'fill-opacity 1.2s ease-out', pointerEvents: 'none' }} />
+          <polygon points={pts(wallL)}
+            fill={isLit ? lightColors.litWallL.fill : lightColors.unlitWall.fill}
+            style={{ fillOpacity: isLit ? lightColors.litWallL.op : lightColors.unlitWall.op, transition: isLit ? 'fill-opacity 6s ease-in' : 'fill-opacity 1.2s ease-out', pointerEvents: 'none' }} />
+          <polygon points={pts(wallR)}
+            fill={isLit ? lightColors.litWallR.fill : lightColors.unlitWall.fill}
+            style={{ fillOpacity: isLit ? lightColors.litWallR.op : lightColors.unlitWall.op, transition: isLit ? 'fill-opacity 6s ease-in' : 'fill-opacity 1.2s ease-out', pointerEvents: 'none' }} />
+        </>
+      )}
 
       {/* Drag-over drop target highlight — full silhouette, blue dashed */}
       {isDragOver && room.interactive && (
@@ -402,7 +449,7 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
           letterSpacing="0.5"
           style={{ pointerEvents: 'none', userSelect: 'none' }}
         >
-          {room.name}
+          {room.name} <tspan fontFamily="'Segoe UI Emoji','Apple Color Emoji',sans-serif" fontSize={7}>{isLit ? '☀' : '🌙'}</tspan>
         </text>
       )}
 
@@ -537,14 +584,14 @@ function IsoBox({ room, ox, oy, colors, onClick, isSelected, isHovered, onHover,
 
 // ─── Flat 2D tile renderer ───────────────────────────────────────────────────
 function FlatBox({ room, flatOx, flatOy, colors, onClick, isSelected, isHovered, onHover,
-                   isDragOver, onDragEnter, onDragLeave, onDrop, selectedFlagId, taskCount }) {
+                   isDragOver, onDragEnter, onDragLeave, onDrop, selectedFlagId, taskCount, hiddenOverlayTypes, isLit, lightColors }) {
   const x  = flatOx + room.col * FLAT_S
   const y  = flatOy + room.row * FLAT_S
   const rw = room.w  * FLAT_S
   const rh = room.h  * FLAT_S
   const cx = x + rw / 2
   const cy = y + rh / 2
-  const symbols = (room.symbols || []).slice(0, 4)
+  const symbols = (room.symbols || []).filter(s => !hiddenOverlayTypes?.has(s)).slice(0, 4)
 
   const handleDragOver  = (e) => { if (!room.interactive) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; onDragEnter?.(room.id) }
   const handleDragLeave = ()  => onDragLeave?.()
@@ -566,6 +613,13 @@ function FlatBox({ room, flatOx, flatOy, colors, onClick, isSelected, isHovered,
       style={{ cursor: room.interactive ? 'pointer' : 'default', outline: 'none' }}
     >
       <rect x={x} y={y} width={rw} height={rh} fill={colors.top} stroke={colors.stroke} strokeWidth={0.8} rx={1} />
+
+      {/* Light glow — per-theme warm/dark overlay */}
+      {room.interactive && lightColors && (
+        <rect x={x} y={y} width={rw} height={rh} rx={1}
+          fill={isLit ? lightColors.litTop.fill : lightColors.unlitTop.fill}
+          style={{ fillOpacity: isLit ? lightColors.litTop.op : lightColors.unlitTop.op, transition: isLit ? 'fill-opacity 6s ease-in' : 'fill-opacity 1.2s ease-out', pointerEvents: 'none' }} />
+      )}
 
       {(isSelected || isHovered) && (
         <rect x={x - 1} y={y - 1} width={rw + 2} height={rh + 2}
@@ -591,7 +645,7 @@ function FlatBox({ room, flatOx, flatOy, colors, onClick, isSelected, isHovered,
           fill={colors.label} fontSize={room.type === 'flower' ? 7.5 : 6.5}
           fontFamily="'JetBrains Mono', monospace" fontWeight="700" letterSpacing="0.5"
           style={{ pointerEvents: 'none', userSelect: 'none' }}>
-          {room.name}
+          {room.name} <tspan fontFamily="'Segoe UI Emoji','Apple Color Emoji',sans-serif" fontSize={6.5}>{isLit ? '☀' : '🌙'}</tspan>
         </text>
       )}
       {symbols.length > 0 && (
@@ -631,6 +685,33 @@ function useMapTheme() {
   return theme
 }
 
+// ─── Light schedule ───────────────────────────────────────────────────────────
+// Even-numbered rooms: ON 00:03–13:03  |  Odd-numbered rooms: ON 13:03–00:03
+function getRoomNumber(id) {
+  const n = parseInt(id.replace(/\D/g, ''), 10)
+  return isNaN(n) ? 0 : n
+}
+function computeLitGroup() {
+  const now  = new Date()
+  const mins = now.getHours() * 60 + now.getMinutes()
+  return (mins >= 3 && mins < 783) ? 'even' : 'odd'  // 783 = 13*60+3
+}
+function useRoomLights() {
+  const [litGroup, setLitGroup] = useState(computeLitGroup)
+
+  useEffect(() => {
+    // Check every minute for schedule transitions
+    const tick = setInterval(() => setLitGroup(computeLitGroup()), 60_000)
+    return () => clearInterval(tick)
+  }, [])
+
+  return (roomId) => {
+    const n = getRoomNumber(roomId)
+    const isEven = n % 2 === 0
+    return litGroup === 'even' ? isEven : !isEven
+  }
+}
+
 // ─── Hook: 2D/3D view mode (localStorage + custom event bus) ─────────────────
 function useMapViewMode() {
   const [mode, setMode] = useState(() => localStorage.getItem('mapViewPreference') || '2D')
@@ -646,6 +727,7 @@ function useMapViewMode() {
 export default function IsometricMap() {
   const mapTheme   = useMapTheme()
   const viewMode   = useMapViewMode()
+  const isRoomLit  = useRoomLights()
   const mapPalette = MAP_PALETTES[mapTheme] || MAP_PALETTES['night-mode']
   const isFlat     = viewMode === '2D'
 
@@ -661,6 +743,7 @@ export default function IsometricMap() {
   const selectedFlagId       = useFacilityStore(s => s.selectedFlagId)
   const clearSelectedFlag    = useFacilityStore(s => s.clearSelectedFlag)
   const addSymbolToRoom      = useFacilityStore(s => s.addSymbolToRoom)
+  const hiddenOverlayTypes   = useFacilityStore(s => s.hiddenOverlayTypes)
   const apiStatus            = useFacilityStore(s => s.apiStatus)
   const transfers            = useFacilityStore(s => s.transfers)
   const pendingTransferOrigin = useFacilityStore(s => s.pendingTransferOrigin)
@@ -861,6 +944,9 @@ export default function IsometricMap() {
             onDragLeave: handleDragLeave,
             onDrop: handleDrop,
             taskCount,
+            hiddenOverlayTypes,
+            isLit: tile.interactive ? isRoomLit(tile.id) : false,
+            lightColors: LIGHT_PALETTES[mapTheme] || LIGHT_PALETTES['night-mode'],
           }
 
           return isFlat

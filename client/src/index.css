@@ -469,6 +469,17 @@ g[role="button"]:focus-visible {
 }
 
 /* ── Drawer sections ──────────────────────────────────────────── */
+.drawer-tab-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-hi) transparent;
+}
+.drawer-tab-content::-webkit-scrollbar { width: 5px; }
+.drawer-tab-content::-webkit-scrollbar-track { background: transparent; }
+.drawer-tab-content::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 3px; }
+
 .drawer-section {
   padding: 16px 20px;
   border-bottom: 1px solid var(--border);
@@ -3107,6 +3118,57 @@ g[role="button"]:focus-visible {
   .room-drawer { width: min(380px, 90vw); }
 }
 
+/* ── Swipe handles — right-edge grab tabs (mobile only) ──────── */
+.swipe-handle {
+  display: none; /* hidden on desktop */
+}
+@media (max-width: 767px) {
+  .swipe-handle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    right: 0;
+    width: 22px;
+    padding: 10px 0;
+    gap: 4px;
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-hi);
+    border-right: none;
+    border-radius: 8px 0 0 8px;
+    z-index: 280;
+    cursor: pointer;
+    touch-action: none;
+    box-shadow: -3px 0 12px rgba(0,0,0,0.4);
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .swipe-handle:active { background: var(--bg-surface); }
+  .swipe-handle--open {
+    border-color: var(--accent);
+    background: color-mix(in srgb, var(--accent) 10%, var(--bg-elevated));
+  }
+  .swipe-handle--open .swipe-handle-chevron { color: var(--accent); }
+
+  .swipe-handle--chat  { top: 38%; }
+  .swipe-handle--tasks { top: 54%; }
+
+  .swipe-handle-chevron {
+    font-size: 13px;
+    color: var(--text-dim);
+    line-height: 1;
+    font-family: var(--font-mono);
+  }
+  .swipe-handle-label {
+    font-size: 6px;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+  }
+}
+
 /* ── FAB group (mobile) ───────────────────────────────────────── */
 .fab-group {
   position: fixed;
@@ -3783,6 +3845,7 @@ g[role="button"]:focus-visible {
     border-right: 1.5px solid var(--border-hi);
   }
   .chat-sidebar.open { transform: translateX(0); }
+
 }
 
 /* Desktop: ensure chat button is visible */

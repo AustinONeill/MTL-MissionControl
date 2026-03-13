@@ -270,12 +270,7 @@ function ChatInput({ convId, authUser, onSent }) {
           onChange={handleTextChange}
           onKeyDown={handleKey}
           rows={1}
-          placeholder={
-            ac.mode === 'room'    ? 'Filter rooms…' :
-            ac.mode === 'task'    ? 'Filter tasks…' :
-            ac.mode === 'subtask' ? 'Filter subtasks…' :
-            'Message or type a room name to log a task…'
-          }
+          placeholder=""
           disabled={sending}
           autoComplete="off"
         />
